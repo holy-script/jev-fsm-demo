@@ -4,3 +4,7 @@ node_modules
 .env.local
 next-env.d.ts
 *.tsbuildinfo
+
+# third-party itch.io packs (personal use; do not redistribute)
+assets/
+public/game-assets/
