@@ -1,8 +1,9 @@
 import * as Phaser from "phaser";
 import { Fighter, World, angleTo, dist, inShape, type DuelManifest } from "./engine";
-import { BOSSES, GAME, GLYPH, HERO, HERO_MOVES, LIGHT_CHAIN, TILE, ZOOM, type AtkType, type BossDef, type GateDef, type HitDef, type MoveDef, type SpawnDef } from "./data";
+import { BOSSES, GAME, GLYPH, HERO, HERO_MOVES, LIGHT_CHAIN, SPIRIT, TILE, ZOOM, type AtkType, type BossDef, type GateDef, type HitDef, type MoveDef, type SpawnDef } from "./data";
 import { DIFFICULTY, save, saveGame, settings } from "./settings";
 import { Vfx } from "./vfx";
+import { awardPoint, has } from "./skills";
 import { Telemetry, askGate, askIdle, rulesGate, rulesIdle, type Decision, type DuelSnapshot, type Outcome } from "./brain";
 import { Sfx } from "./sfx";
 
@@ -17,12 +18,14 @@ export interface HudState {
   bossVisible: boolean; bossName: string; bossHp: number; bossSegs: number; bossSeg: number; bossPosture: number; bossGuard: boolean;
   message: string; sub: string; auto: boolean; music: boolean;
   brain: "JEV" | "RULES"; thinking: boolean; last: string; bossArmor: boolean;
+  spirit: number; maxSpirit: number; riposte: boolean; art: boolean; tool: boolean;
 }
 interface Proj { x: number; y: number; vx: number; vy: number; spr: Phaser.GameObjects.Sprite; dmg: number; post: number; defl: number; moveId: string; reflected: boolean; consumed: boolean; dodged: boolean; born: number }
 interface Beam { x: number; y: number; ang: number; until: number; len: number; half: number; spr: Phaser.GameObjects.Sprite; dmg: number; post: number; moveId: string; hit: boolean; dodged: boolean }
 interface GateRt { def: GateDef; requested: boolean; asking: boolean; ans: string | null; applied: boolean }
 const GATE_WAIT = 450; // how long a poised boss waits for Jev's branch answer before taking the default
 const ASK_TIMEOUT = 1500;
+const SKILL_IDS = ["keen", "echo", "wrist", "rollcut", "whirl", "reach", "blades", "well", "gourd"];
 const CAPTAIN_STEP = (speed: number) => speed * 0.55; // speed of the post-string recoil step
 
 type PMode = "free" | "guard" | "attack" | "roll" | "kick" | "heal" | "hurt" | "broken" | "dead";
@@ -46,6 +49,7 @@ export class DuelScene extends Phaser.Scene {
   private def: BossDef = BOSSES[0];
   private bossIdx = 0;
   private projs: Proj[] = [];
+  private blades: { x: number; y: number; vx: number; vy: number; born: number }[] = [];
   private beams: Beam[] = [];
   private sfx!: Sfx;
   private vfx!: Vfx;
@@ -67,6 +71,7 @@ export class DuelScene extends Phaser.Scene {
     hp: 0, posture: 0, mode: "free" as PMode, since: 0, move: null as MoveDef | null, hit: [] as boolean[], chain: 0, chainUntil: 0,
     guardSince: 0, lastGuardPress: -9999, noDeflect: false, guardPrev: false, rollCd: 0, invulnUntil: 0, heals: 0, lastPostureHit: 0,
     rollDir: { x: 1, y: 0 }, dir: 0, atkBuf: 0, heavyBuf: 0, rollBuf: 0, kickBuf: 0, healBuf: 0,
+    spirit: 0, riposteUntil: 0, artBuf: 0, toolBuf: 0, thrown: false,
   };
   // boss
   private b = {
@@ -108,13 +113,15 @@ export class DuelScene extends Phaser.Scene {
     this.fx = this.add.graphics().setDepth(40);
     this.glyphText = this.add.text(0, 0, "!", { fontFamily: "monospace", fontSize: "14px", color: "#fff", fontStyle: "bold" }).setOrigin(0.5).setDepth(45).setResolution(2).setVisible(false);
 
-    this.keys = this.input.keyboard!.addKeys("W,A,S,D,UP,DOWN,LEFT,RIGHT,SPACE,SHIFT,J,K,E,Q,R,M,Z,X,C,V,B,G,N,T,Y,F,ONE,TWO,ESC") as Record<string, Phaser.Input.Keyboard.Key>;
+    this.keys = this.input.keyboard!.addKeys("W,A,S,D,UP,DOWN,LEFT,RIGHT,SPACE,SHIFT,J,K,E,Q,R,M,Z,X,C,V,B,G,N,T,Y,F,ONE,TWO,ESC,L,I") as Record<string, Phaser.Input.Keyboard.Key>;
     this.input.mouse?.disableContextMenu();
-    const buf = (field: "atkBuf" | "heavyBuf" | "rollBuf" | "kickBuf" | "healBuf") => () => (this.p[field] = this.time.now + 220);
+    const buf = (field: "atkBuf" | "heavyBuf" | "rollBuf" | "kickBuf" | "healBuf" | "artBuf" | "toolBuf") => () => (this.p[field] = this.time.now + 220);
     this.keys.J.on("down", buf("atkBuf"));
     this.keys.K.on("down", buf("heavyBuf"));
     this.keys.SHIFT.on("down", buf("rollBuf"));
     this.keys.E.on("down", buf("kickBuf"));
+    this.keys.L.on("down", buf("artBuf"));
+    this.keys.I.on("down", buf("toolBuf"));
     this.keys.Q.on("down", buf("healBuf"));
     this.input.on("pointerdown", (ptr: Phaser.Input.Pointer) => {
       if (!ptr.rightButtonDown()) this.p.atkBuf = this.time.now + 220;
@@ -143,7 +150,8 @@ export class DuelScene extends Phaser.Scene {
     this.keys.ONE.on("down", () => this.reset(0));
     this.keys.TWO.on("down", () => this.reset(1));
 
-    this.hud = { hp: 1, posture: 0, heals: HERO.heals, bossVisible: false, bossName: BOSSES[0].name, bossHp: 1, bossSegs: BOSSES[0].segments, bossSeg: 0, bossPosture: 0, bossGuard: false, message: "", sub: "", auto: true, music: true, brain: "JEV", thinking: false, last: "", bossArmor: false };
+    this.events.on("skills-closed", () => this.finishShrine());
+    this.hud = { hp: 1, posture: 0, heals: HERO.heals, bossVisible: false, bossName: BOSSES[0].name, bossHp: 1, bossSegs: BOSSES[0].segments, bossSeg: 0, bossPosture: 0, bossGuard: false, message: "", sub: "", auto: true, music: true, brain: "JEV", thinking: false, last: "", bossArmor: false, spirit: 0, maxSpirit: 3, riposte: false, art: false, tool: false };
     this.registry.set("hud", this.hud);
     if (process.env.NODE_ENV !== "production") (window as unknown as { __duel?: DuelScene }).__duel = this; // for scripted tests
     this.scene.launch("duelhud");
@@ -180,7 +188,8 @@ export class DuelScene extends Phaser.Scene {
     this.player.x = s.player.x;
     this.player.y = s.player.y;
     this.player.face = 1;
-    Object.assign(this.p, { hp: HERO.maxHp, posture: 0, mode: "free", since: this.time.now, move: null, chain: 0, heals: HERO.heals, invulnUntil: 0, rollCd: 0 });
+    Object.assign(this.p, { hp: HERO.maxHp, posture: 0, mode: "free", since: this.time.now, move: null, chain: 0, heals: HERO.heals, invulnUntil: 0, rollCd: 0, spirit: 1, riposteUntil: 0 });
+    this.blades = [];
     this.spawnBoss(idx);
     this.player.freeze(false);
     this.boss.freeze(false);
@@ -213,6 +222,7 @@ export class DuelScene extends Phaser.Scene {
     this.p.hp = HERO.maxHp;
     this.p.posture = 0;
     this.p.heals = HERO.heals;
+    this.p.spirit = this.maxSpirit();
     this.b.posture = 0;
     this.b.hp = this.def.segmentHp;
     this.b.armorUntil = 0;
@@ -289,6 +299,11 @@ export class DuelScene extends Phaser.Scene {
     this.hud.bossPosture = this.b.posture / this.def.maxPosture;
     this.hud.bossGuard = this.b.mode === "guard";
     this.hud.bossArmor = this.time.now < this.b.armorUntil;
+    this.hud.spirit = this.p.spirit;
+    this.hud.maxSpirit = this.maxSpirit();
+    this.hud.riposte = this.time.now < this.p.riposteUntil;
+    this.hud.art = has("whirl");
+    this.hud.tool = has("blades");
     this.hud.thinking = this.b.asking || this.b.gates.some((g) => g.asking && !g.applied);
 
     if (this.hitstop > 0) {
@@ -306,6 +321,7 @@ export class DuelScene extends Phaser.Scene {
       this.updateBoss(now, dt);
       this.updateProjectiles(now, dt);
       this.updateBeams(now);
+      this.updateBlades(now, dt);
       this.separate(dt);
       this.checkWake();
     }
@@ -382,9 +398,23 @@ export class DuelScene extends Phaser.Scene {
 
         if (p.rollBuf > now && now >= p.rollCd) return this.startRoll(now, mx, my, moving);
         if (p.healBuf > now && p.heals > 0 && p.hp < HERO.maxHp) return this.startHeal(now);
+        if (p.artBuf > now) {
+          p.artBuf = 0;
+          if (!has("whirl")) this.lockedMsg("not learned");
+          else if (p.spirit < SPIRIT.whirlCost) this.lockedMsg("need spirit");
+          else return this.startMove(now, "WHIRL", "attack");
+        }
+        if (p.toolBuf > now) {
+          p.toolBuf = 0;
+          if (!has("blades")) this.lockedMsg("not learned");
+          else if (p.spirit < SPIRIT.bladeCost) this.lockedMsg("need spirit");
+          else if (!this.bossActive()) this.lockedMsg("no target");
+          else return this.startMove(now, "THROW", "attack");
+        }
         if (p.kickBuf > now) return this.startMove(now, "KICK", "kick");
         if (p.heavyBuf > now) return this.startMove(now, "D", "attack");
         if (p.atkBuf > now) {
+          if (now < p.riposteUntil && this.bossActive()) return this.startMove(now, "RIPOSTE", "attack");
           if (now > p.chainUntil) p.chain = 0;
           return this.startMove(now, LIGHT_CHAIN[p.chain % LIGHT_CHAIN.length], "attack");
         }
@@ -394,11 +424,11 @@ export class DuelScene extends Phaser.Scene {
       case "kick": {
         const mv = p.move!;
         this.runPlayerMove(now, dt, mv, ix, iy);
-        const lastHit = Math.max(...mv.hits.map((h) => h.frames[1]));
+        const lastHit = mv.hits.length ? Math.max(...mv.hits.map((h) => h.frames[1])) : 99;
         if (p.mode === "attack" && f.frame > lastHit) {
           // cancel windows: chain the next light, roll, or guard out of recovery
           if (p.rollBuf > now && now >= p.rollCd) return this.startRoll(now, mx, my, moving);
-          if (p.atkBuf > now && mv.id !== "D") {
+          if (p.atkBuf > now && mv.id !== "D" && !["RIPOSTE", "ROLLCUT", "WHIRL", "THROW"].includes(mv.id)) {
             p.chain++;
             return this.startMove(now, LIGHT_CHAIN[p.chain % LIGHT_CHAIN.length], "attack");
           }
@@ -409,8 +439,8 @@ export class DuelScene extends Phaser.Scene {
             p.noDeflect = true;
           }
         }
-        if ((p.mode as PMode) !== "free" && (p.mode as PMode) !== "guard" && f.done) {
-          if (mv.id !== "D" && mv.id !== "KICK") p.chainUntil = now + 420;
+        if ((p.mode as PMode) !== "free" && (p.mode as PMode) !== "guard" && (mv.endFrame !== undefined ? f.frame >= mv.endFrame : f.done)) {
+          if (mv.id !== "D" && mv.id !== "KICK" && mv.id !== "RIPOSTE" && mv.id !== "WHIRL" && mv.id !== "THROW") p.chainUntil = now + 420;
           else p.chain = 0;
           this.setP("free");
         }
@@ -424,6 +454,10 @@ export class DuelScene extends Phaser.Scene {
           this.afterAt = now + 45;
           this.vfx.afterimage(f, 0x8fd0ff, 0.35, 230);
         }
+        if (p.atkBuf > now && t > HERO.rollMs * 0.3 && has("rollcut") && this.bossActive()) {
+          p.rollCd = now + HERO.rollCooldownMs;
+          return this.startMove(now, "ROLLCUT", "attack");
+        }
         if (f.done || t > HERO.rollMs + 140) {
           p.rollCd = now + HERO.rollCooldownMs;
           this.setP("free");
@@ -436,7 +470,7 @@ export class DuelScene extends Phaser.Scene {
         f.play("blockUp", 6, { loop: true });
         if (Math.random() < 0.3) this.burst(f.x + Phaser.Math.Between(-8, 8), f.y - 10, 1, 0x6bff9a, 22, 1.6);
         if (!f.flashing && Math.floor((now - p.since) / 170) % 2 === 1) f.hitFlash(85, 0x6bff9a); // green pulse: no drinking animation, so the body glows instead
-        if (now - p.since >= HERO.healMs) {
+        if (now - p.since >= HERO.healMs * (has("gourd") ? 0.7 : 1)) {
           p.hp = Math.min(HERO.maxHp, p.hp + HERO.healAmount);
           p.heals--;
           this.vfx.heal(f.x, f.y - 34);
@@ -467,13 +501,21 @@ export class DuelScene extends Phaser.Scene {
     p.move = mv;
     p.hit = mv.hits.map(() => false);
     p.atkBuf = p.heavyBuf = p.kickBuf = 0;
-    this.tel.record(id === "KICK" ? "kick" : "attack", now);
+    p.thrown = false;
+    this.tel.record(id === "KICK" ? "kick" : id === "WHIRL" ? "art" : id === "THROW" ? "tool" : id === "RIPOSTE" ? "riposte" : "attack", now);
     this.tel.react("attack", now);
+    if (id === "WHIRL") p.spirit -= SPIRIT.whirlCost;
+    if (id === "THROW") p.spirit -= SPIRIT.bladeCost;
+    if (id === "RIPOSTE") {
+      p.riposteUntil = 0;
+      this.vfx.afterimage(f, 0xfff2b0, 0.5, 260);
+    }
     this.setP(mode);
     f.face = this.bossActive() ? (this.boss.x >= f.x ? 1 : -1) : f.face;
     p.dir = this.bossActive() ? this.aimAtBoss() : f.face > 0 ? 0 : Math.PI;
     f.play(mv.anim, mv.fps * (this.beatMode() ? 0.85 : 1), { restart: true }); // a touch slower in choreographed mode
-    this.sfx.swing(id === "D");
+    if (id === "WHIRL") this.sfx.whirl();
+    else if (id !== "THROW") this.sfx.swing(id === "D");
   }
 
   private runPlayerMove(now: number, dt: number, mv: MoveDef, ix: number, iy: number) {
@@ -481,6 +523,19 @@ export class DuelScene extends Phaser.Scene {
     const fr = f.frame;
     if (this.bossActive() && fr < Math.min(...mv.hits.map((h) => h.frames[0]))) p.dir = this.aimAtBoss(); // aim assist until the swing commits
     for (const l of mv.lunge ?? []) if (fr >= l.frames[0] && fr <= l.frames[1]) f.move(this.world, Math.cos(p.dir) * l.speed * dt, Math.sin(p.dir) * l.speed * dt);
+    if (mv.id === "THROW" && !p.thrown && fr >= 2) {
+      p.thrown = true;
+      this.spawnBlade();
+    }
+    if (mv.id === "WHIRL" && !p.thrown && fr >= 3) {
+      p.thrown = true;
+      for (let i = 0; i < 3; i++) this.vfx.play("hit05", f.x, f.y - 30, { scale: 2.4, tint: 0xfff2b0, rot: (i * Math.PI * 2) / 3, add: true });
+      this.vfx.shock(f.x, f.y - 8, 0xfff2b0, 1.9);
+    }
+    if (mv.id === "ROLLCUT" || mv.id === "RIPOSTE") if (now - this.afterAt > 40) {
+      this.afterAt = now;
+      this.vfx.afterimage(f, 0xfff2b0, 0.3, 200);
+    }
     mv.hits.forEach((h, i) => {
       if (p.hit[i] || fr < h.frames[0]) return;
       if (fr > h.frames[1]) return void (p.hit[i] = true);
@@ -491,6 +546,62 @@ export class DuelScene extends Phaser.Scene {
       }
     });
     void ix; void iy;
+  }
+
+  // ---- thrown blades (tool)
+  private spawnBlade() {
+    const f = this.player, a = this.aimAtBoss();
+    this.blades.push({ x: f.x + Math.cos(a) * 12, y: f.y + Math.sin(a) * 12, vx: Math.cos(a) * 430, vy: Math.sin(a) * 430, born: this.time.now });
+    this.sfx.throwBlade();
+  }
+
+  private updateBlades(now: number, dt: number) {
+    for (const bl of this.blades) {
+      bl.x += bl.vx * dt;
+      bl.y += bl.vy * dt;
+      if (now - bl.born > 1300 || this.world.blocked({ l: bl.x - 2, r: bl.x + 2, t: bl.y - 2, b: bl.y + 2 })) {
+        bl.born = -1e9;
+        continue;
+      }
+      if (this.bossActive() && dist(bl.x, bl.y, this.boss.x, this.boss.y) < this.def.radius + 8) {
+        bl.born = -1e9;
+        this.bladeHitsBoss(now);
+      }
+    }
+    this.blades = this.blades.filter((b) => now - b.born <= 1300);
+  }
+
+  private bladeHitsBoss(now: number) {
+    const b = this.b, bp = this.chest(this.boss, this.def.headY * 0.45);
+    this.sfx.bladeHit();
+    this.vfx.hit(bp.x, bp.y, false, 0xdfe9ff);
+    if (b.mode === "broken") return; // chip only; a deathblow needs a real strike
+    if (b.mode === "guard") {
+      if (this.def.stoneGuard) {
+        this.popup(this.boss.x, this.boss.y - this.def.headY - 14, "NO EFFECT", "#b8b0a2");
+        return;
+      }
+      b.posture = Math.min(100, b.posture + 12);
+      b.lastPostureHit = now;
+      this.boss.freeze(false);
+      this.setB("flinch", 700);
+      this.boss.play(this.def.anims.hit, undefined, { restart: true });
+      this.popup(this.boss.x, this.boss.y - this.def.headY - 14, "GUARD NUDGED", "#dfe9ff");
+      this.checkBossBreak(now);
+      return;
+    }
+    const armored = now < b.armorUntil;
+    b.hp -= 6 * (armored ? 0.5 : 1) * DIFFICULTY[settings.difficulty].dealt;
+    b.posture = Math.min(100, b.posture + 8 * (armored ? 0.7 : 1));
+    b.lastPostureHit = now;
+    this.boss.hitFlash(60, 0xdfe9ff);
+    if (b.mode !== "attack" && now >= b.poiseUntil && !this.def.noFlinch && !armored) {
+      this.setB("flinch", 220);
+      b.poiseUntil = now + 1100;
+      this.boss.play(this.def.anims.hit, undefined, { restart: true });
+    }
+    if (b.hp <= 0) return this.segmentEmpty(now);
+    this.checkBossBreak(now);
   }
 
   private startRoll(now: number, mx: number, my: number, moving: boolean) {
@@ -556,7 +667,7 @@ export class DuelScene extends Phaser.Scene {
         }
         return;
       }
-      if (mv.id === "KICK") {
+      if (mv.id === "KICK" || mv.id === "WHIRL") {
         b.posture = Math.min(100, b.posture + 28);
         b.lastPostureHit = now;
         this.setB("flinch", 900);
@@ -678,9 +789,10 @@ export class DuelScene extends Phaser.Scene {
     this.hud.sub = more ? `${BOSSES[this.bossIdx + 1].name} stirs…` : "R to fight again";
     this.sfx.playMusic("temple", 0.22);
     this.hooks.onLog(`${this.def.name} defeated`);
+    awardPoint(1);
     if (!save.cleared.includes(this.def.id)) save.cleared.push(this.def.id);
     saveGame();
-    if (more) this.time.delayedCall(4200, () => this.nextBoss());
+    if (more) this.time.delayedCall(4200, () => this.openShrine());
   }
 
   // ------------------------------------------------------------ boss
@@ -690,6 +802,37 @@ export class DuelScene extends Phaser.Scene {
   private firstAct(mv: MoveDef) {
     const fs = [...mv.hits.map((h) => h.frames[0]), ...(mv.spawns ?? []).map((x) => x.frame), ...(mv.beam ? [mv.beam.frame] : []), ...(mv.buff ? [mv.buff.frame] : [])];
     return Math.min(...fs);
+  }
+  private pendingNext = false;
+  /** After a boss: the shrine (spend skill points), then the next guardian. The scripted tests skip the screen (?dev=1). */
+  private openShrine() {
+    if (this.p.mode === "dead") return;
+    this.pendingNext = true;
+    if (this.registry.get("dev")) return this.finishShrine();
+    this.scene.launch("skills", { from: "duel" });
+    this.scene.pause();
+  }
+  private finishShrine() {
+    if (!this.pendingNext) return;
+    this.pendingNext = false;
+    this.nextBoss();
+  }
+  private maxSpirit() {
+    return SPIRIT.base + (has("well") ? SPIRIT.wellBonus : 0);
+  }
+  private gainSpirit(n: number) {
+    this.p.spirit = Math.min(this.maxSpirit(), this.p.spirit + n);
+    this.sfx.spirit();
+  }
+  /** Opens the riposte window: the next attack becomes a free, heavy counter. */
+  private openRiposte(now: number, ms: number) {
+    const mul = (has("reach") ? 1.5 : 1);
+    this.p.riposteUntil = now + ms * mul + (has("echo") ? 300 : 0);
+    this.sfx.riposteReady();
+  }
+  private lockedMsg(what: string) {
+    this.popup(this.player.x, this.player.y - 74, what, "#9aa4b2");
+    this.sfx.locked();
   }
   private beatMode() {
     return settings.beat === "beat";
@@ -740,7 +883,7 @@ export class DuelScene extends Phaser.Scene {
     return this.beatMode() ? (heavy ? 1.25 : 0.75) * this.beatMs() : heavy ? 750 : 520;
   }
   private deflectMs() {
-    return DIFFICULTY[settings.difficulty].deflectMs;
+    return DIFFICULTY[settings.difficulty].deflectMs + (has("keen") ? 40 : 0);
   }
   private phase(): 1 | 2 {
     return this.b.seg >= 1 ? 2 : 1;
@@ -851,7 +994,7 @@ export class DuelScene extends Phaser.Scene {
       boss: { segment: b.seg + 1, ofSegments: this.def.segments, phase: this.phase(), hpPct: Math.round((Math.max(0, b.hp) / this.def.segmentHp) * 100), posturePct: Math.round(b.posture), armored: now < b.armorUntil, mode: b.mode, lastActions: b.history.slice(-5), sameActionStreak: streak },
       player: {
         hpPct: Math.round(p.hp), posturePct: Math.round(p.posture), healsLeft: p.heals, state, distancePx: Math.round(d), distanceTrend: this.tel.trend(),
-        standingStillMs: Math.round(now - this.stillSince), guardHeld: p.mode === "guard",
+        standingStillMs: Math.round(now - this.stillSince), guardHeld: p.mode === "guard", spirit: p.spirit, riposteReady: now < p.riposteUntil, skills: (SKILL_IDS.filter((id) => has(id))),
       },
       recent: this.tel.recent(now, 8000),
       vsMove: this.tel.summary(),
@@ -1312,6 +1455,8 @@ export class DuelScene extends Phaser.Scene {
 
   private slip(now: number) {
     const b = this.b;
+    this.gainSpirit(1);
+    this.openRiposte(now, SPIRIT.slipRiposteMs);
     b.posture = Math.min(100, b.posture + 30);
     b.lastPostureHit = now;
     this.boss.freeze(false);
@@ -1337,7 +1482,9 @@ export class DuelScene extends Phaser.Scene {
 
     if (kind === "deflect") {
       this.tel.record("deflect", now);
-      b.posture = Math.min(100, b.posture + h.deflectPosture);
+      this.gainSpirit(1 + (has("echo") ? 1 : 0));
+      this.openRiposte(now, SPIRIT.riposteMs);
+      b.posture = Math.min(100, b.posture + h.deflectPosture * (has("wrist") ? 1.3 : 1));
       b.lastPostureHit = now;
       this.sfx.deflect();
       this.vfx.deflect(cp.x + f.face * 10, cp.y);
@@ -1434,6 +1581,11 @@ export class DuelScene extends Phaser.Scene {
       const a = 0.35 + 0.15 * Math.sin(now / 120);
       g.fillStyle(0x8a4bff, a * 0.5).fillRect(gt.l, y - 14, gt.r - gt.l, 28);
       g.fillStyle(0xc9a0ff, a).fillRect(gt.l, y - 2, gt.r - gt.l, 4);
+    }
+    for (const bl of this.blades) g.lineStyle(2, 0xdfe9ff, 0.95).lineBetween(bl.x, bl.y - 22, bl.x - bl.vx * 0.035, bl.y - 22 - bl.vy * 0.035);
+    if (now < this.p.riposteUntil && this.p.mode !== "dead") {
+      const rp = 0.5 + 0.5 * Math.sin(now / 70);
+      g.lineStyle(2, 0xfff2b0, 0.5 + 0.4 * rp).strokeEllipse(this.player.x, this.player.y, 30 + rp * 6, 12 + rp * 3);
     }
     // choreographed mode: a faint pulse on the floor under the boss at every beat
     if (this.beatMode() && this.bossActive()) {

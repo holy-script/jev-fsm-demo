@@ -15,7 +15,7 @@ interface MoveStats {
 }
 const blankStats = (): MoveStats => ({ thrown: 0, deflected: 0, blocked: 0, dodged: 0, hit: 0, slipped: 0, missed: 0, react: { roll: 0, guard: 0, attack: 0, retreat: 0, none: 0 } });
 
-type EventType = "attack" | "guard" | "deflect" | "roll" | "kick" | "heal" | "hurt";
+type EventType = "attack" | "guard" | "deflect" | "roll" | "kick" | "heal" | "hurt" | "art" | "tool" | "riposte";
 
 /** What Jev gets to know about the player: rolling windows of actions plus, per boss move, how the player has answered it. */
 export class Telemetry {
@@ -77,7 +77,7 @@ export class Telemetry {
   recent(now: number, ms: number) {
     const e = this.events.filter((x) => now - x.t <= ms);
     const n = (t: EventType) => e.filter((x) => x.type === t).length;
-    return { windowSec: ms / 1000, attacks: n("attack"), guardTaps: n("guard"), deflects: n("deflect"), rolls: n("roll"), kicks: n("kick"), heals: n("heal"), hitsTaken: n("hurt") };
+    return { windowSec: ms / 1000, attacks: n("attack"), guardTaps: n("guard"), deflects: n("deflect"), rolls: n("roll"), kicks: n("kick"), heals: n("heal"), hitsTaken: n("hurt"), arts: n("art"), tools: n("tool"), ripostes: n("riposte") };
   }
 
   /** Compact per-move record: only moves that have been thrown. */
@@ -95,7 +95,7 @@ export interface DuelSnapshot {
   boss: { segment: number; ofSegments: number; phase: 1 | 2; hpPct: number; posturePct: number; armored: boolean; mode: string; lastActions: string[]; sameActionStreak: number };
   player: {
     hpPct: number; posturePct: number; healsLeft: number; state: string; distancePx: number; distanceTrend: string; standingStillMs: number;
-    guardHeld: boolean;
+    guardHeld: boolean; spirit: number; riposteReady: boolean; skills: string[];
   };
   recent: ReturnType<Telemetry["recent"]>;
   vsMove: Record<string, unknown>;
@@ -131,6 +131,7 @@ Rules you must reason with:
 - Moves marked unblockable (perilous thrust, sweep, grab, laser) cannot be blocked or deflected. Rolling gives the player brief invulnerability: it beats a sweep or a beam, and rolling INTO a thrust makes them SLIP you (+30 posture on you). A grab ignores guard AND roll invulnerability: only distance avoids it.
 - A thrown projectile can be blocked, rolled through, or deflected back at you if the player's guard tap is well timed (then YOUR posture rises).
 - The player's kick breaks a raised guard unless the move description says otherwise.
+- After a successful deflect or a slip the player has a short RIPOSTE window (snapshot.player.riposteReady): a fast lunging counter that deals big posture damage, so the moment after a deflect is the moment to be elsewhere, guarded, or already swinging. The player also earns spirit from deflects, which funds a spin attack (whirl) that hits all around and breaks a raised guard, and thrown blades that chip posture from range (see player.skills and recent.arts/tools).
 - A player who always answers the same way (always rolls, always deflects, always attacks first) can be punished by the move that beats that answer.
 - When snapshot.timing.mode is "beat", the fight is choreographed to a musical beat (timing.beatMs per beat): your attacks land ON the beat, and a DELAY lands half a beat OFF it. A player who taps guard on the beat deflects on-beat attacks easily but is beaten by off-beat ones.
 Play to win but stay unpredictable: do not repeat the same action over and over, and adapt to the habits shown in the data.`;

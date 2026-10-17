@@ -19,6 +19,7 @@ export class Sfx {
     const TRIM: Record<string, number> = {
       swing: 6.5, hit: 9, deflect: 5, block: 6.5, guardBreak: 3, postureBreak: 4, deathblow: 0, hurt: 7, roll: 8.5, heal: 0, slip: 3.5,
       stoneHit: 2.5, throwFist: 4.5, buff: 2, charge: 6, beamFire: 0, warn: 2.5, thud: 0, whoosh: 0, clash: 3,
+      riposteReady: 3, spirit: 2, whirl: 5, throwBlade: 5, bladeHit: 7, locked: 0, skill: 0,
     };
     for (const [name, db] of Object.entries(TRIM)) {
       const orig = (this as unknown as Record<string, (...a: unknown[]) => void>)[name].bind(this);
@@ -256,6 +257,43 @@ export class Sfx {
       this.tone(o, "sawtooth", 160, 900, 0.34, 0.7, 0.15);
       this.tone(o, "sine", 320, 1800, 0.22, 0.7, 0.15);
     }
+  }
+
+  // ------------------------------------------------------------------ skills
+  /** A soft two-note chime: a riposte is available. */
+  riposteReady() {
+    const o = this.out();
+    if (!o) return;
+    this.tone(o, "sine", 988, 988, 0.22, 0.004, 0.22);
+    this.tone(o, "sine", 1480, 1480, 0.2, 0.004, 0.3, 0.08);
+  }
+  spirit() {
+    const o = this.out();
+    if (o) this.tone(o, "sine", 600, 1200, 0.2, 0.01, 0.2);
+  }
+  whirl() {
+    this.whoosh(0.34, 0.36, 300, 2600, 0.7);
+    this.sample("blade", 10, 0.4, 1, [9, 10]);
+    this.thud(0.4);
+  }
+  throwBlade() {
+    this.whoosh(0.26, 0.16, 1200, 3400, 1.2);
+  }
+  bladeHit() {
+    const o = this.out();
+    if (!o) return;
+    this.burst(o, "bandpass", 3200, 1500, 1.4, 0.4, 0.002, 0.07);
+    this.thud(0.4);
+  }
+  /** Menu feedback: a refused action. */
+  locked() {
+    const o = this.out();
+    if (o) this.tone(o, "square", 180, 120, 0.12, 0.004, 0.14);
+  }
+  skill() {
+    const o = this.out();
+    if (!o) return;
+    [392, 523, 659].forEach((f, i) => this.tone(o, "triangle", f, f, 0.16, 0.01, 0.3, i * 0.07));
   }
 
   /** A bright inharmonic ring: four detuned partials with fast decay plus a short noise tick. */

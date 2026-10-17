@@ -15,6 +15,7 @@ export class HudScene extends Phaser.Scene {
   private bossName!: Phaser.GameObjects.Text;
   private help!: Phaser.GameObjects.Text;
   private brain!: Phaser.GameObjects.Text;
+  private riposteText!: Phaser.GameObjects.Text;
 
   constructor() {
     super("duelhud");
@@ -27,6 +28,7 @@ export class HudScene extends Phaser.Scene {
     this.sub = this.add.text(VIEW_W / 2, 342, "", { ...font, fontSize: "20px" }).setOrigin(0.5);
     this.bossName = this.add.text(VIEW_W / 2, 22, "", { ...font, fontSize: "16px", strokeThickness: 4 }).setOrigin(0.5, 0);
     this.brain = this.add.text(28, VIEW_H - 92, "", { ...font, fontSize: "13px", strokeThickness: 3 }).setOrigin(0, 0);
+    this.riposteText = this.add.text(VIEW_W / 2, VIEW_H - 86, "RIPOSTE  [J]", { ...font, fontSize: "18px", color: "#fff2b0", strokeThickness: 4 }).setOrigin(0.5).setVisible(false);
     this.help = this.add
       .text(VIEW_W - 12, VIEW_H - 10, "J attack · K heavy · SPACE guard (tap = deflect) · SHIFT roll · E kick · Q heal · F brain · M music · R retry", { ...font, fontSize: "12px", strokeThickness: 3 })
       .setOrigin(1, 1)
@@ -54,6 +56,12 @@ export class HudScene extends Phaser.Scene {
     g.fillStyle(0xd23a3f).fillRect(28, VIEW_H - 60, 340 * Math.max(0, s.hp), 5);
     for (let i = 0; i < s.heals; i++) g.fillStyle(0x6bff9a).fillCircle(36 + i * 20, VIEW_H - 30, 7).lineStyle(1, 0x000000, 0.8).strokeCircle(36 + i * 20, VIEW_H - 30, 7);
 
+    // spirit pips (diamonds) and the riposte prompt
+    for (let i = 0; i < s.maxSpirit; i++) {
+      const cx = 36 + i * 20, cy = VIEW_H - 74, on = i < s.spirit;
+      g.fillStyle(on ? 0x7cc4ff : 0x1b2430, on ? 1 : 0.8).fillPoints([{ x: cx, y: cy - 7 }, { x: cx + 6, y: cy }, { x: cx, y: cy + 7 }, { x: cx - 6, y: cy }] as Phaser.Types.Math.Vector2Like[], true);
+      g.lineStyle(1, 0x000000, 0.8).strokePoints([{ x: cx, y: cy - 7 }, { x: cx + 6, y: cy }, { x: cx, y: cy + 7 }, { x: cx - 6, y: cy }] as Phaser.Types.Math.Vector2Like[], true);
+    }
     // player posture (bottom centre): white -> orange -> red as it fills
     const pc = s.posture < 0.6 ? lerpColor(0xe9e2cf, 0xf0a030, s.posture / 0.6) : lerpColor(0xf0a030, 0xe0302a, (s.posture - 0.6) / 0.4);
     this.centreBar(VIEW_W / 2, VIEW_H - 44, 420, 10, s.posture, pc);
@@ -74,6 +82,9 @@ export class HudScene extends Phaser.Scene {
     const dots = ".".repeat(1 + (Math.floor(this.time.now / 250) % 3));
     this.brain.setVisible(s.bossVisible).setColor(s.brain === "JEV" ? "#8fd0ff" : "#ffd36b").setText(`BRAIN ${s.brain}${s.thinking ? " thinking" + dots : ""}${s.last ? "   " + s.last : ""}`);
 
+    const rp = 0.55 + 0.45 * Math.sin(this.time.now / 90);
+    this.riposteText.setVisible(s.riposte).setAlpha(rp);
+    this.help.setText(`J attack · K heavy · SPACE guard (tap = deflect) · SHIFT roll · E kick · Q heal${s.art ? " · L whirl" : ""}${s.tool ? " · I blades" : ""} · F brain · M music · R retry`);
     this.title.setText(s.message);
     this.sub.setText(s.sub);
   }

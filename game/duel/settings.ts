@@ -36,11 +36,13 @@ export const saveSettings = () => write("duel.settings", settings);
 export interface SaveData {
   cleared: string[]; // boss ids defeated
   deaths: number;
+  skills: string[]; // unlocked skill ids
+  points: number; // unspent skill points
 }
-export const save: SaveData = read("duel.save", { cleared: [], deaths: 0 });
+const FRESH: SaveData = { cleared: [], deaths: 0, skills: [], points: 2 };
+export const save: SaveData = read("duel.save", { ...FRESH });
 export const saveGame = () => write("duel.save", save);
 export const resetSave = () => {
-  save.cleared = [];
-  save.deaths = 0;
+  Object.assign(save, { ...FRESH, cleared: [], skills: [] });
   saveGame();
 };

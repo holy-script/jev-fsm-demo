@@ -105,8 +105,14 @@ export const HERO_MOVES: Record<string, MoveDef> = {
   B: { id: "B", label: "Thrust", anim: "atkB", fps: 15, hits: [{ frames: [2, 3], type: "normal", damage: 15, posture: 12, deflectPosture: 0, shape: cone(66, 26) }], lunge: [{ frames: [1, 3], speed: 120 }] },
   D: { id: "D", label: "Heavy", anim: "atkD", fps: 13, hits: [{ frames: [5, 6], type: "heavy", damage: 26, posture: 24, deflectPosture: 0, shape: cone(56, 72) }], lunge: [{ frames: [3, 5], speed: 60 }] },
   KICK: { id: "KICK", label: "Kick", anim: "kick", fps: 16, hits: [{ frames: [1, 2], type: "normal", damage: 4, posture: 8, deflectPosture: 0, shape: cone(40, 55) }] },
+  // Skill-gated and spirit moves (see skills.ts)
+  RIPOSTE: { id: "RIPOSTE", label: "Riposte", anim: "atkB", fps: 22, hits: [{ frames: [2, 3], type: "normal", damage: 20, posture: 28, deflectPosture: 0, shape: cone(84, 30) }], lunge: [{ frames: [0, 3], speed: 150 }] },
+  ROLLCUT: { id: "ROLLCUT", label: "Roll cut", anim: "atkA", fps: 22, hits: [{ frames: [3, 4], type: "normal", damage: 14, posture: 12, deflectPosture: 0, shape: cone(62, 70) }], lunge: [{ frames: [0, 4], speed: 120 }] },
+  WHIRL: { id: "WHIRL", label: "Whirl cut", anim: "atkC", fps: 15, hits: [{ frames: [4, 5], type: "normal", damage: 14, posture: 18, deflectPosture: 0, shape: { kind: "circle", range: 66 } }] },
+  THROW: { id: "THROW", label: "Throw", anim: "atkA", fps: 30, endFrame: 3, hits: [] },
 };
 export const LIGHT_CHAIN = ["A", "C", "B"];
+export const SPIRIT = { base: 3, wellBonus: 2, whirlCost: 2, bladeCost: 1, riposteMs: 800, slipRiposteMs: 1100 };
 
 export interface BossDef {
   id: string;

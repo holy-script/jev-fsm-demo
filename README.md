@@ -43,3 +43,15 @@ If Jev errors, is slow (>1.5s) or answers with an unavailable action, the boss f
 - **Difficulty** (Settings): Assist / Duelist / Shadow change the deflect window (220 / 160 / 130 ms) and damage dealt and taken.
 - **Sound**: recorded CC0 sword clashes and swings plus a synthesised library on one compressed bus, with a distinct warning cue for each unblockable move (thrust, sweep, grab, laser). `node tests/duel/audio.mjs` renders every cue offline and prints peak and loudness so levels can be balanced without listening.
 - **Effects**: where an animation is missing, tinted bursts, afterimages and squash stand in: red body flash and blood for hurt, green pulse and sparkle for heal, a starburst for deflect, shards for stone.
+
+### Skills
+
+Core moves are always available (light chain, heavy, guard/deflect, roll, kick, heal) and a **riposte**: a deflect or a slip opens a short window in which your next attack (J) becomes a free lunging counter that deals heavy posture damage. Deflects and slips also earn **spirit**, which funds the unlockable skills. You start with 2 skill points and earn 1 per boss, spent at the shrine (opens after each boss, and from the pause menu), so you cannot buy everything:
+
+| Path | Skills |
+|---|---|
+| Deflection | Keen Eye (+40 ms window) -> Echo (+1 spirit, longer riposte), Iron Wrist (+30% deflect posture damage) |
+| Flow | Roll Cut (attack during a roll), Whirl Cut (L, 2 spirit: spin, breaks a raised guard), Riposte Reach (+50% window) |
+| Tools | Throwing Blades (I, 1 spirit: ranged posture chip), Spirit Well (+2 max spirit), Quick Gourd (30% faster heal) |
+
+Jev sees your spirit, riposte readiness, unlocked skills and how often you use arts and tools. `node tests/duel/skills.mjs` covers all of it.

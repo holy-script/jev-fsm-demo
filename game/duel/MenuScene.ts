@@ -33,6 +33,8 @@ export class MenuScene extends Phaser.Scene {
     this.mode = data.mode ?? "title";
     this.screen = "main";
     this.idx = 0;
+    this.texts = [];
+    this.embers = [];
   }
 
   create() {
@@ -108,6 +110,7 @@ export class MenuScene extends Phaser.Scene {
           ]
         : [
             { label: () => "Resume", act: () => this.resume() },
+            { label: () => "Skills (shrine)", act: () => { this.scene.setVisible(false); this.scene.launch("skills", { from: "menu" }); this.scene.pause(); } },
             { label: () => "Settings", act: () => { this.screen = "settings"; this.idx = 0; this.build(); } },
             { label: () => "Quit to title", act: () => this.quitToTitle() },
           ];

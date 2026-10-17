@@ -2,6 +2,7 @@ import * as Phaser from "phaser";
 import { DuelScene, type DuelHooks } from "./DuelScene";
 import { HudScene } from "./HudScene";
 import { MenuScene } from "./MenuScene";
+import { SkillScene } from "./SkillScene";
 import { VIEW_H, VIEW_W } from "./data";
 import type { DuelManifest } from "./engine";
 
@@ -27,6 +28,7 @@ class BootScene extends Phaser.Scene {
     for (const [k, mu] of Object.entries(m.music)) this.load.audio("music_" + k, "/" + mu.file);
     const dev = typeof window !== "undefined" && new URLSearchParams(window.location.search).has("dev"); // ?dev=1 skips the title (tests)
     this.registry.set("hooks", this.hooks);
+    this.registry.set("dev", dev);
     this.load.once("complete", () => (dev ? this.scene.start("duel", this.hooks) : this.scene.start("menu", { mode: "title" })));
     this.load.start();
   }
@@ -48,6 +50,7 @@ export function createDuelGame(parent: HTMLElement, hooks: DuelHooks) {
   game.scene.add("duel", DuelScene, false);
   game.scene.add("duelhud", HudScene, false);
   game.scene.add("menu", MenuScene, false);
+  game.scene.add("skills", SkillScene, false);
   if (process.env.NODE_ENV !== "production") (window as unknown as { __game?: Phaser.Game }).__game = game; // for scripted tests
   return () => game.destroy(true);
 }
