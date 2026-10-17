@@ -178,7 +178,8 @@ export class MenuScene extends Phaser.Scene {
 const CREDITS = [
   "Hero, Shield Skeleton: Szadi art - Hero and Opponents",
   "Mecha-Stone Golem: Darkpixel",
-  "Tiles, effects, sound effects, music: pixel-boy - Ninja Adventure (CC0)",
+  "Tiles and music: pixel-boy - Ninja Adventure (CC0)",
+  "Sword sounds: StarNinjas, via OpenGameArt (CC0)",
   "",
   "Boss brain: Jev, by TypeSafe",
   "Built with Phaser and Next.js",

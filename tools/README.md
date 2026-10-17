@@ -27,12 +27,14 @@ npm run assets                           # slices strips + manifest.json, cuts t
 | Pack | Author | Licence | Used for |
 |---|---|---|---|
 | Hero and Opponents | Szadi art | edit and use freely, no resale | hero + Shield Skeleton |
-| Ninja Adventure | pixel-boy | CC0 | cliff tiles, 28 sound effects, 2 music tracks |
+| Ninja Adventure | pixel-boy | CC0 | cliff tiles, 2 music tracks |
+| Sword + Sword Clash sounds | StarNinjas (OpenGameArt) | CC0 (credit requested) | recorded sword swings and clashes; everything else in `sfx.ts` is synthesised |
 | Mecha-Stone Golem | Darkpixel | none stated | boss 2 |
 
 ```bash
 npm run assets:download:duel                       # fetches into assets/_dl2
 cd assets && mkdir -p packs2 && for f in _dl2/*/*.zip _dl2/*/*.rar; do n=$(basename "$(dirname "$f")"); mkdir -p "packs2/$n" && bsdtar -x -f "$f" -C "packs2/$n"; done; cd ..
+sh tools/fetch_sfx.sh                              # 20 CC0 sword sounds (OpenGameArt, StarNinjas) into assets/packs3
 npm run assets:duel                                # strips + manifest, repacked tileset, audio, public/maps/duel_arena.json
 ```
 

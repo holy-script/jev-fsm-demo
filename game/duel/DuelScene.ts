@@ -428,7 +428,7 @@ export class DuelScene extends Phaser.Scene {
         if (now - p.since >= HERO.healMs) {
           p.hp = Math.min(HERO.maxHp, p.hp + HERO.healAmount);
           p.heals--;
-          this.sfx.play("heal2", { volume: 0.5 });
+          this.sfx.heal();
           this.ring(f.x, f.y - 24, 0x6bff9a, 22);
           this.setP("free");
         }
@@ -460,7 +460,7 @@ export class DuelScene extends Phaser.Scene {
     f.face = this.bossActive() ? (this.boss.x >= f.x ? 1 : -1) : f.face;
     p.dir = this.bossActive() ? this.aimAtBoss() : f.face > 0 ? 0 : Math.PI;
     f.play(mv.anim, mv.fps, { restart: true });
-    this.sfx.play(id === "D" ? "whoosh" : "swing" + Phaser.Math.Between(1, 5), { volume: id === "D" ? 0.55 : 0.4 });
+    this.sfx.swing(id === "D");
   }
 
   private runPlayerMove(now: number, dt: number, mv: MoveDef, ix: number, iy: number) {
@@ -496,7 +496,7 @@ export class DuelScene extends Phaser.Scene {
     if (Math.abs(dx) > 0.2) f.face = dx > 0 ? 1 : -1;
     this.setP("roll");
     f.play("roll", undefined, { restart: true });
-    this.sfx.play("whoosh2", { volume: 0.4 });
+    this.sfx.roll();
   }
 
   private startHeal(now: number) {
@@ -521,8 +521,7 @@ export class DuelScene extends Phaser.Scene {
           this.setB("flinch", 1100);
           this.boss.play(this.def.anims.hit, undefined, { restart: true });
           this.popup(this.boss.x, this.boss.y - this.def.headY - 14, "GUARD BROKEN", "#ffd36b");
-          this.sfx.play("impact4", { volume: 0.7 });
-          this.sfx.clang(0.8);
+          this.sfx.guardBreak();
           this.burst(bp.x, bp.y, 18, 0xcfc7b8, 150, 2.4);
           this.stop(GAME.hitstopHeavy);
           this.cameras.main.shake(160, 0.006);
@@ -531,8 +530,7 @@ export class DuelScene extends Phaser.Scene {
           this.p.posture = Math.min(100, this.p.posture + 6);
           this.p.lastPostureHit = now;
           this.player.move(this.world, -this.player.face * 8, 0);
-          this.sfx.play("impact1", { volume: 0.35 });
-          this.sfx.clang(0.3);
+          this.sfx.stoneHit();
           this.burst(bp.x, bp.y, 6, 0xb8b0a2, 80, 1.8);
           this.popup(this.boss.x, this.boss.y - this.def.headY - 14, mv.id === "KICK" ? "NO EFFECT" : "STONE GUARD", "#b8b0a2");
           this.stop(GAME.hitstopLight);
@@ -545,8 +543,7 @@ export class DuelScene extends Phaser.Scene {
         this.setB("flinch", 900);
         this.boss.play(this.def.anims.hit, undefined, { restart: true });
         this.popup(this.boss.x, this.boss.y - this.def.headY - 14, "GUARD BREAK", "#ffd36b");
-        this.sfx.clang(0.8);
-        this.sfx.play("impact3", { volume: 0.5 });
+        this.sfx.guardBreak();
         this.burst(bp.x, bp.y, 14, 0xffd36b, 120, 2);
         this.stop(GAME.hitstopHeavy);
         return;
@@ -556,7 +553,7 @@ export class DuelScene extends Phaser.Scene {
       this.p.posture = Math.min(100, this.p.posture + 5);
       this.p.lastPostureHit = now;
       this.player.move(this.world, -this.player.face * 8, 0);
-      this.sfx.clang(0.45);
+      this.sfx.block(0.7);
       this.burst(bp.x, bp.y, 8, 0xffa94d, 90, 1.8);
       this.stop(GAME.hitstopLight);
       this.checkBossBreak(now);
@@ -569,7 +566,7 @@ export class DuelScene extends Phaser.Scene {
     b.lastPostureHit = now;
     this.boss.hitFlash(70);
     this.burst(bp.x, bp.y, h.type === "heavy" ? 14 : 9, 0xffe9c2, h.type === "heavy" ? 140 : 100, 2);
-    this.sfx.pick(h.type === "heavy" ? ["impact1", "impact2", "impact3"] : ["hit1", "hit2", "hit3"], { volume: 0.55 });
+    this.sfx.hit(h.type === "heavy");
     this.stop(h.type === "heavy" ? GAME.hitstopHeavy : GAME.hitstopLight);
     this.cameras.main.shake(h.type === "heavy" ? 120 : 60, h.type === "heavy" ? 0.004 : 0.002);
     if (b.mode !== "attack" && now >= b.poiseUntil && !this.def.noFlinch && !armored) {
@@ -595,8 +592,7 @@ export class DuelScene extends Phaser.Scene {
     this.setB("broken", ms);
     this.boss.play(this.def.anims.hit, 6, { restart: true });
     this.popup(this.boss.x, this.boss.y - this.def.headY - 14, "POSTURE BROKEN", "#ffd36b");
-    this.sfx.play("impact4", { volume: 0.7 });
-    this.sfx.clang(0.9);
+    this.sfx.postureBreak();
     this.ring(this.boss.x, this.boss.y - this.def.headY * 0.45, 0xffd36b, 34);
     this.stop(170);
     this.cameras.main.shake(180, 0.006);
@@ -616,9 +612,7 @@ export class DuelScene extends Phaser.Scene {
 
   private deathblow(now: number) {
     const b = this.b;
-    this.sfx.play("impact5", { volume: 0.8 });
-    this.sfx.play("boom2", { volume: 0.4 });
-    this.sfx.play("voice2", { volume: 0.5 });
+    this.sfx.deathblow();
     this.stop(260);
     this.cameras.main.flash(180, 255, 240, 200);
     this.cameras.main.shake(260, 0.01);
@@ -908,7 +902,7 @@ export class DuelScene extends Phaser.Scene {
     const gl = GLYPH[mtype];
     if (gl) {
       b.glyph = { type: mtype, until: now + (mv.holds?.[0]?.ms ?? 400) * m.hold + 360 };
-      this.sfx.play(mtype === "thrust" ? "alert1" : mtype === "sweep" || mtype === "beam" ? "alert2" : "alert3", { volume: 0.55 });
+      this.sfx.warn(mtype);
     }
     this.hooks.onLog(`boss: ${mv.label}`);
   }
@@ -942,7 +936,7 @@ export class DuelScene extends Phaser.Scene {
       this.ring(this.boss.x, this.boss.y - this.def.headY * 0.45, 0x9fe8ff, 46);
       this.burst(this.boss.x, this.boss.y - this.def.headY * 0.45, 20, 0x9fe8ff, 120, 2.2);
       this.popup(this.boss.x, this.boss.y - this.def.headY - 14, "ARMORED", "#9fe8ff");
-      this.sfx.play("magic1", { volume: 0.6 });
+      this.sfx.buff();
       this.stop(90);
     }
   }
@@ -953,7 +947,7 @@ export class DuelScene extends Phaser.Scene {
     const spr = this.add.sprite(x, y - 20, "fx_fist").setScale(1.25).setDepth(10 + y / 100).setRotation(ang);
     spr.anims.play({ key: "fx_fist", frameRate: 14, repeat: -1 });
     this.projs.push({ x, y, vx: Math.cos(ang) * speed, vy: Math.sin(ang) * speed, spr, dmg: sp.damage, post: sp.posture, defl: sp.deflectPosture, moveId: mv.id, reflected: false, consumed: false, dodged: false, born: this.time.now });
-    this.sfx.play("swing4", { volume: 0.5, rate: 0.7 });
+    this.sfx.throwFist();
   }
 
   private endProjectile(pr: Proj) {
@@ -979,7 +973,7 @@ export class DuelScene extends Phaser.Scene {
           b.posture = Math.min(100, b.posture + pr.defl);
           b.lastPostureHit = now;
           this.boss.hitFlash(90);
-          this.sfx.pick(["impact2", "impact3"], { volume: 0.6 });
+          this.sfx.hit(true);
           this.popup(this.boss.x, this.boss.y - this.def.headY - 14, "REFLECTED", "#fff2b0");
           this.stop(GAME.hitstopHeavy);
           this.checkBossBreak(now);
@@ -1027,8 +1021,7 @@ export class DuelScene extends Phaser.Scene {
     const spr = this.add.sprite(ox, oy - 14, "fx_beam").setOrigin(40 / 300, 33 / 100).setRotation(ang).setScale(bm.length / 260, 0.75).setDepth(10 + oy / 100 + 0.2);
     spr.anims.play({ key: "fx_beam", frameRate: 14, repeat: -1 });
     this.beams.push({ x: ox, y: oy, ang, until: now + bm.ms, len: bm.length, half: bm.halfWidth, spr, dmg: bm.damage, post: bm.posture, moveId: mv.id, hit: false, dodged: false });
-    this.sfx.play("magic1", { volume: 0.7, rate: 0.8 });
-    this.sfx.play("boom2", { volume: 0.4 });
+    this.sfx.beamFire();
     this.cameras.main.shake(bm.ms, 0.003);
   }
 
@@ -1150,8 +1143,8 @@ export class DuelScene extends Phaser.Scene {
     if (!b.sounded && !holding && fr >= firstHit - 1) {
       b.sounded = true;
       const mt = this.moveType(mv);
-      if (mv.kind === "buff") this.sfx.play("magic1", { volume: 0.5 });
-      else if (mv.kind !== "beam" && mv.kind !== "projectile") this.sfx.play(mt === "heavy" || mt === "sweep" ? "whoosh" : "swing" + Phaser.Math.Between(1, 5), { volume: 0.5 });
+      if (mv.kind === "buff") this.sfx.charge();
+      else if (mv.kind !== "beam" && mv.kind !== "projectile") this.sfx.swing(mt === "heavy" || mt === "sweep", true);
     }
     for (const l of mv.lunge ?? []) if (!holding && fr >= l.frames[0] && fr <= l.frames[1]) {
       const near = dist(f.x, f.y, this.player.x, this.player.y) > this.def.radius + HERO.radius + 8;
@@ -1236,8 +1229,7 @@ export class DuelScene extends Phaser.Scene {
     this.boss.play(this.def.anims.hit, undefined, { restart: true });
     b.glyph = null;
     this.popup(this.boss.x, this.boss.y - this.def.headY - 14, "SLIP", "#ff8a8a");
-    this.sfx.pick(["impact2", "impact3"], { volume: 0.5 });
-    this.sfx.clang(0.6);
+    this.sfx.slip();
     this.ring(this.boss.x, this.boss.y - this.def.headY * 0.45, 0xff8a8a, 30);
     this.stop(130);
     this.checkBossBreak(now);
@@ -1253,8 +1245,7 @@ export class DuelScene extends Phaser.Scene {
       this.tel.record("deflect", now);
       b.posture = Math.min(100, b.posture + h.deflectPosture);
       b.lastPostureHit = now;
-      this.sfx.clang(1);
-      this.sfx.play("sword", { volume: 0.4 });
+      this.sfx.deflect();
       this.burst(cp.x + f.face * 10, cp.y, 22, 0xfff2b0, 170, 2.2);
       this.ring(cp.x + f.face * 10, cp.y, 0xffffff, 28);
       this.popup(f.x, f.y - 74, "DEFLECT", "#fff2b0");
@@ -1270,8 +1261,7 @@ export class DuelScene extends Phaser.Scene {
       p.hp -= h.damage * dmgMul * HERO.chipFraction;
       p.posture += h.posture;
       p.lastPostureHit = now;
-      this.sfx.pick(["impact2", "impact3"], { volume: 0.5 });
-      this.sfx.clang(0.4);
+      this.sfx.block(1);
       this.burst(cp.x + f.face * 10, cp.y, 10, 0xffa94d, 110, 1.8);
       this.stop(GAME.hitstopLight);
       f.move(this.world, Math.cos(away) * 14, Math.sin(away) * 14);
@@ -1285,8 +1275,7 @@ export class DuelScene extends Phaser.Scene {
     p.hp -= h.damage * mult * dmgMul;
     p.posture += h.posture * 0.4;
     p.lastPostureHit = now;
-    this.sfx.play("hit5", { volume: 0.6 });
-    this.sfx.pick(["voice1", "voice3"], { volume: 0.35 });
+    this.sfx.hurt();
     this.burst(cp.x, cp.y, 12, 0xff4d4d, 130, 2);
     this.stop(kind === "grab" ? 200 : GAME.hitstopHeavy);
     this.cameras.main.shake(180, kind === "grab" ? 0.01 : 0.006);
@@ -1303,8 +1292,7 @@ export class DuelScene extends Phaser.Scene {
     this.setP("broken");
     this.player.play("hitB", 4, { restart: true });
     this.popup(this.player.x, this.player.y - 74, "POSTURE BROKEN", "#ffd36b");
-    this.sfx.play("impact4", { volume: 0.7 });
-    this.sfx.clang(0.9);
+    this.sfx.postureBreak();
     this.cameras.main.shake(200, 0.008);
     this.p.invulnUntil = now + 300;
   }

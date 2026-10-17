@@ -115,24 +115,27 @@ os.makedirs(os.path.join(OUT, "tiles"))
 tiles.save(os.path.join(OUT, "tiles", "duel_tiles.png"))
 manifest["tiles"] = {"file": "duel-assets/tiles/duel_tiles.png", "cols": 7, "rows": 3}
 
-# ---- audio (Ninja Adventure, CC0)
-S = os.path.join(NA, "Audio", "Sounds")
-picks = {
-    "swing1": "Whoosh & Slash/Slash.wav", "swing2": "Whoosh & Slash/Slash2.wav", "swing3": "Whoosh & Slash/Slash3.wav",
-    "swing4": "Whoosh & Slash/Slash4.wav", "swing5": "Whoosh & Slash/Slash5.wav", "whoosh": "Whoosh & Slash/Whoosh.wav",
-    "whoosh2": "Whoosh & Slash/Whoosh2.wav", "sword": "Whoosh & Slash/Sword2.wav",
-    "hit1": "Hit & Impact/Hit1.wav", "hit2": "Hit & Impact/Hit2.wav", "hit3": "Hit & Impact/Hit3.wav", "hit5": "Hit & Impact/Hit5.wav",
-    "impact1": "Hit & Impact/Impact.wav", "impact2": "Hit & Impact/Impact2.wav", "impact3": "Hit & Impact/Impact3.wav",
-    "impact4": "Hit & Impact/Impact4.wav", "impact5": "Hit & Impact/Impact5.wav",
-    "heal": "Magic & Skill/Heal.wav", "heal2": "Magic & Skill/Heal2.wav", "magic1": "Magic & Skill/Magic1.wav",
-    "alert1": "Alert/Alert.wav", "alert2": "Alert/Alert2.wav", "alert3": "Alert/Alert3.wav",
-    "voice1": "Voice/Voice1.wav", "voice2": "Voice/Voice2.wav", "voice3": "Voice/Voice3.wav",
-    "boom": "Elemental/Explosion.wav", "boom2": "Elemental/Explosion2.wav",
-}
+# ---- audio. Sword clashes/swings: OpenGameArt "sword" + "sword clash" by StarNinjas (CC0), normalised to a common loudness.
+# Everything else (thuds, whooshes, warning cues, heals) is synthesised at runtime in game/duel/sfx.ts.
+import subprocess
 os.makedirs(os.path.join(OUT, "audio"))
-for k, rel in picks.items():
-    shutil.copy(os.path.join(S, rel), os.path.join(OUT, "audio", k + ".wav"))
-    manifest["audio"][k] = f"duel-assets/audio/{k}.wav"
+P3 = os.path.join(ROOT, "assets", "packs3")
+def convert(src, key):
+    dst = os.path.join(OUT, "audio", key + ".wav")
+    r = subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", src, "-af", "loudnorm=I=-19:TP=-3:LRA=7,aformat=sample_fmts=s16:channel_layouts=mono", "-ar", "44100", dst])
+    if r.returncode != 0:
+        sys.exit(f"ffmpeg failed on {src}")
+    manifest["audio"][key] = f"duel-assets/audio/{key}.wav"
+clashes = sorted(glob.glob(os.path.join(P3, "oga-clash", "*.ogg")), key=nat)
+blades = sorted(glob.glob(os.path.join(P3, "oga-swords", "*", "*.ogg")), key=nat)
+if len(clashes) != 10 or len(blades) != 10:
+    sys.exit("missing sword samples in assets/packs3 - see tools/README.md (fetch_sfx.sh)")
+for i, f in enumerate(clashes, 1):
+    convert(f, f"clash{i}")
+for i, f in enumerate(blades, 1):
+    convert(f, f"blade{i}")
+
+# ---- music (Ninja Adventure, CC0)
 for k, name in {"fight": "17 - Fight.ogg", "explore": "10 - Dark Castle.ogg"}.items():
     shutil.copy(os.path.join(NA, "Audio", "Musics", name), os.path.join(OUT, "audio", k + ".ogg"))
     manifest["music"][k] = f"duel-assets/audio/{k}.ogg"
