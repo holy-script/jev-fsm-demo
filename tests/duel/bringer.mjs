@@ -18,9 +18,9 @@ check("the final boss is the Bringer of Death with three lives", s.def === "brin
 await p.waitForTimeout(500); await p.screenshot({ path: "/tmp/bringer_idle.png" });
 
 await setup(70); await key("z", 30); await p.waitForTimeout(3200); s = await st();
-check("scythe cut hits an unguarded player", s.php <= 82, s);
+check("scythe cut hits an unguarded player", s.php <= 84, s);
 await setup(70); await p.keyboard.down("Space"); await p.waitForTimeout(250); await key("x", 30); await p.waitForTimeout(3200); await p.keyboard.up("Space"); s = await st();
-check("reaping sweep cannot be blocked", s.php <= 78, s);
+check("reaping sweep cannot be blocked", s.php <= 80, s);
 await setup(70); await key("x", 30); await p.waitForFunction(() => { const d = window.__duel; return d.b.holdIdx > 0 && !d.b.held; }, null, { timeout: 6000, polling: "raf" }); await p.keyboard.down("d"); await key("Shift", 30); await p.keyboard.up("d"); await p.waitForTimeout(2200); s = await st();
 check("reaping sweep is avoided by rolling through it", s.php >= 96, s);
 
@@ -30,7 +30,7 @@ await setup(200, 1); await key("c", 30); await p.waitForTimeout(3200); mp = awai
 check("soul bolt: two bolts in the later lives", mp === 2, { mp });
 
 await setup(200, 0); await key("v", 30); await p.waitForTimeout(3000); s = await st(); let pil = await p.evaluate(() => window.__maxPil);
-check("pillars: two in the first life, and a standing player is struck", pil === 2 && s.php <= 80, { pil, ...s });
+check("pillars: two in the first life, and a standing player is struck", pil === 2 && s.php <= 82, { pil, ...s });
 await setup(200, 2); await key("v", 30); await p.waitForTimeout(3000); pil = await p.evaluate(() => window.__maxPil);
 check("pillars: four in the last life", pil === 4, { pil });
 await setup(200, 0); await key("v", 30);

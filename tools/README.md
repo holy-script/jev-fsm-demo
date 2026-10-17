@@ -42,3 +42,7 @@ npm run assets:duel                                # strips + manifest, repacked
 
 `prep_duel_assets.py` derives each sprite's foot anchor from its idle frame so characters stand on their `(x, y)` position and flip cleanly.
 `make_duel_map.py` writes the 80x60 Tiled map (layers `ground`, `walls`, `objects` with `player`/`boss` spawns, `gate` and an `arena` rect that locks the camera).
+
+## Balance harness
+
+`node tests/duel/bot.mjs captain,golem,bringer 2 classic|beat` (needs `npm run dev`): a scripted player at three skill levels (novice, competent, expert) fights each boss against the rules brain and prints win rate, fight length and lowest HP. It is a crude stand-in for a human, so read it as a relative signal. Current shape: the Bringer in beat mode is lost by novices in life 2, reached to life 3 by competent bots and beaten by expert bots.
