@@ -9,6 +9,7 @@ import { AreaView } from "./world";
 import { BOSSES, ENCOUNTERS, GENERIC_ACTIONS, type BossDef } from "./bosses";
 import { BossBrain, Telemetry, type Decision, type Snapshot } from "./brain";
 import { Fighter } from "./fighter";
+import { GameInput, type InputFrame } from "./input";
 import { loadMemory, memoryFor, profile, remember, saveMemory, type MemoryStore } from "./memory";
 import { MashRun, QteRun, type DeathblowGrade } from "./qte";
 import { loadSettings, type ArenaSettings } from "./settings";
@@ -28,6 +29,8 @@ export interface ArenaLogEntry {
   type: string;
   [k: string]: unknown;
 }
+/** QTE prompt ids map to the three combat actions, so prompts show whatever keys the player has bound. */
+const QTE_ACTION: Record<string, "attack" | "guard" | "roll"> = { J: "attack", K: "guard", L: "roll" };
 const FLOOR = { l: 80, r: 880, t: 270, b: 500 };
 
 export class ArenaScene extends Phaser.Scene {
@@ -63,7 +66,8 @@ export class ArenaScene extends Phaser.Scene {
   area?: AreaView;
   private hud!: Phaser.GameObjects.Graphics;
   private texts: Record<string, Phaser.GameObjects.Text> = {};
-  private clickQueued = false;
+  inp!: GameInput;
+  frame!: InputFrame;
   private manifest!: ArenaManifest;
   boss!: BossDef;
   brain!: BossBrain;
@@ -93,13 +97,11 @@ export class ArenaScene extends Phaser.Scene {
     this.buildArea();
     this.enemy = this.makeEnemy();
     this.hud = this.add.graphics().setDepth(2000);
+    this.inp = new GameInput(this, this.settings.keymap);
+    this.frame = this.inp.poll();
     const K = Phaser.Input.Keyboard.KeyCodes;
     const kb = this.input.keyboard!;
-    this.keys = Object.fromEntries(
-      Object.entries({ W: K.W, A: K.A, S: K.S, D: K.D, UP: K.UP, DOWN: K.DOWN, LEFT: K.LEFT, RIGHT: K.RIGHT, J: K.J, K: K.K, SPACE: K.SPACE, SHIFT: K.SHIFT, L: K.L, E: K.E, F: K.F, N: K.N, P: K.P, O: K.O, I: K.I, R: K.R }).map(([n, c]) => [n, kb.addKey(c)]),
-    );
-    kb.addCapture("SPACE,UP,DOWN,LEFT,RIGHT");
-    this.input.on("pointerdown", () => (this.clickQueued = true));
+    this.keys = Object.fromEntries(Object.entries({ P: K.P, O: K.O, I: K.I, R: K.R, F: K.F, N: K.N }).map(([n, c]) => [n, kb.addKey(c)]));
     const t = (k: string, x: number, y: number, size = 14, color = "#e6edf3", origin = 0) => (this.texts[k] = this.add.text(x, y, "", { fontFamily: "monospace", fontSize: size + "px", color }).setDepth(2100).setOrigin(origin, 0));
     t("enemyName", VIEW_W / 2, 18, 14, "#e6edf3", 0.5);
     t("combo", 40, VIEW_H - 120, 22, "#ffd166");
@@ -108,6 +110,10 @@ export class ArenaScene extends Phaser.Scene {
     t("qtekey", VIEW_W / 2, 150, 34, "#ffffff", 0.5);
     t("qtemsg", VIEW_W / 2, 110, 16, "#ffd166", 0.5);
     this.texts.help.setText("WASD move   J/click attack (press again in the chain window)   Space guard (tap just before a hit = PARRY)   Shift roll   E flame burst (2 spirit)" + (this.dev ? "   P ai  O/I enemy attacks  R reset" : "   R reset"));
+    this.game.events.on("arena:settings", () => {
+      this.settings = loadSettings();
+      this.inp.setKeymap(this.settings.keymap);
+    });
     this.reset();
     this.hooks?.onBoss?.(this.boss.name);
     if (process.env.NODE_ENV !== "production") (window as unknown as { __arena?: ArenaScene; __bosses?: typeof BOSSES }).__arena = this;
@@ -161,6 +167,8 @@ export class ArenaScene extends Phaser.Scene {
       dt = 0;
     }
     this.now += dt;
+    this.frame = this.inp.poll();
+    if (this.frame.pause) this.hooks?.onPause?.();
     if (Phaser.Input.Keyboard.JustDown(this.keys.R)) this.reset();
     if (Phaser.Input.Keyboard.JustDown(this.keys.P)) this.e.auto = !this.e.auto;
     if (Phaser.Input.Keyboard.JustDown(this.keys.F)) this.popup(this.enemy.x, this.enemy.y - 170, `brain: ${this.brain.toggle() === "jev" ? "JEV" : "RULES"}`, "#58a6ff");
@@ -178,11 +186,7 @@ export class ArenaScene extends Phaser.Scene {
   }
 
   private dirInput() {
-    const k = this.keys;
-    const x = (k.D.isDown || k.RIGHT.isDown ? 1 : 0) - (k.A.isDown || k.LEFT.isDown ? 1 : 0);
-    const y = (k.S.isDown || k.DOWN.isDown ? 1 : 0) - (k.W.isDown || k.UP.isDown ? 1 : 0);
-    const m = Math.hypot(x, y) || 1;
-    return { x: x / m, y: y / m, any: x !== 0 || y !== 0 };
+    return this.frame.dir;
   }
 
   private step(f: Fighter, dx: number, dy: number) {
@@ -225,12 +229,7 @@ export class ArenaScene extends Phaser.Scene {
   // ---------------------------------------------------------------- player
   private updatePlayer(dt: number) {
     const p = this.p, f = this.player;
-    const press = {
-      attack: Phaser.Input.Keyboard.JustDown(this.keys.J) || this.clickQueued,
-      guard: Phaser.Input.Keyboard.JustDown(this.keys.SPACE) || Phaser.Input.Keyboard.JustDown(this.keys.K),
-      roll: Phaser.Input.Keyboard.JustDown(this.keys.SHIFT) || Phaser.Input.Keyboard.JustDown(this.keys.L),
-      skill: Phaser.Input.Keyboard.JustDown(this.keys.E),
-    };
+    const press = { attack: this.frame.attack, guard: this.frame.guard, roll: this.frame.roll, skill: this.frame.skill };
     if (press.attack) p.counterAt = this.now; // a perilous strike landing within COUNTER ms of this is countered
     if (press.attack) {
       this.telemetry.react("attack", this.now);
@@ -247,8 +246,7 @@ export class ArenaScene extends Phaser.Scene {
       this.telemetry.react("roll", this.now);
       this.telemetry.record("roll", this.now);
     }
-    this.clickQueued = false;
-    const guardHeld = this.keys.SPACE.isDown || this.keys.K.isDown;
+    const guardHeld = this.frame.guardHeld;
     const rollT = this.now - p.rollStart;
     p.def.invulnerable = this.now < p.invulnUntil || (p.mode === "roll" && rollT >= HERO.rollIFrames[0] && rollT <= HERO.rollIFrames[1]);
     if (this.e.mode !== "dead" && p.mode !== "dead") f.face = this.enemy.x >= f.x ? 1 : -1;
@@ -1000,6 +998,7 @@ export class ArenaScene extends Phaser.Scene {
 
   // ---------------------------------------------------------------- feedback
   private shake(intensity: number, ms: number) {
+    if (!this.settings.shake) return;
     this.cameras.main.shake(ms, intensity);
   }
   private popup(x: number, y: number, text: string, color: string) {
@@ -1045,7 +1044,7 @@ export class ArenaScene extends Phaser.Scene {
       g.fillStyle(0x000000, 0.6).fillCircle(cx, cy, 24);
       g.lineStyle(4, col, 1).strokeCircle(cx, cy, r);
       g.lineStyle(2, 0x888888, 1).strokeCircle(cx, cy, 20);
-      this.texts.qtekey.setPosition(cx, cy - 20).setText(c.key);
+      this.texts.qtekey.setPosition(cx, cy - 20).setText(this.inp.label(QTE_ACTION[c.key] ?? "attack"));
       q.prompts.forEach((_, i) => {
         const gr = q.grades[i];
         g.fillStyle(gr === "perfect" ? 0xffd166 : gr === "good" ? 0xa5d6a7 : gr === "miss" ? 0xff6b6b : i === q.i ? 0xffffff : 0x555555, 1).fillCircle(cx - 24 + i * 24, cy + 52, 5);

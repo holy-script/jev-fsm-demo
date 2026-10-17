@@ -9,6 +9,8 @@ export interface ArenaHooks {
   onDecision?: (d: import("./brain").Decision) => void;
   onBoss?: (name: string) => void;
   onLog?: (line: string) => void;
+  /** the pad's Start button (or any in-game pause request) */
+  onPause?: () => void;
 }
 
 /** Loads arena-assets/manifest.json (written by tools/prep_arena_assets.py), then every sheet it names, then starts the arena. */
@@ -44,6 +46,7 @@ export function createArenaGame(parent: HTMLElement, hooks: ArenaHooks) {
     height: VIEW_H,
     backgroundColor: "#0b0d12",
     pixelArt: true,
+    input: { gamepad: true },
     roundPixels: true,
     scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
     scene: [],

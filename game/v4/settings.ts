@@ -1,15 +1,24 @@
-/** Player settings (localStorage "arena.settings"; the ?qte= query parameter overrides for tests). */
+import { DEFAULT_KEYMAP, normaliseKeymap, type Keymap } from "./input";
+
+/** Player settings (localStorage "arena.settings"; ?qte= overrides for tests). */
 export type QteMode = "on" | "assist" | "off";
 export interface ArenaSettings {
   qte: QteMode;
+  keymap: Keymap;
+  music: boolean;
+  sfx: number; // 0..1
+  shake: boolean;
+  /** which brain bosses start with: jev, or the rules bot (for comparison runs) */
+  brain: "jev" | "rules";
 }
 const KEY = "arena.settings";
-const DEFAULTS: ArenaSettings = { qte: "on" };
+const DEFAULTS: ArenaSettings = { qte: "on", keymap: DEFAULT_KEYMAP, music: true, sfx: 0.8, shake: true, brain: "jev" };
 
 export function loadSettings(): ArenaSettings {
-  let s = { ...DEFAULTS };
+  let s: ArenaSettings = { ...DEFAULTS, keymap: { ...DEFAULT_KEYMAP } };
   try {
-    s = { ...s, ...JSON.parse(localStorage.getItem(KEY) ?? "{}") };
+    const raw = JSON.parse(localStorage.getItem(KEY) ?? "{}");
+    s = { ...s, ...raw, keymap: normaliseKeymap(raw.keymap) };
   } catch {
     /* private mode or bad JSON: defaults */
   }
