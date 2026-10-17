@@ -37,7 +37,13 @@ while (guard++ < 400) {
   if (!s.obj) { await p.waitForTimeout(150); continue; }
   const t = s.obj.title; if (seen[seen.length - 1] !== t) seen.push(t);
   switch (t) {
-    case "MOVE": await p.evaluate(() => { window.__duel.movedTotal += 300; }); break;
+    case "MOVE": {
+      // really walk with the keys: the lesson must complete from actual movement
+      for (const k of ["d", "s", "a", "w", "d", "s"]) { await p.keyboard.down(k); await p.waitForTimeout(650); await p.keyboard.up(k); }
+      const moved = await p.evaluate(() => Math.round(window.__duel.movedTotal - window.__duel.movedBase));
+      check("MOVE lesson: walking with WASD counts toward the lesson", moved > 100 || !(await hud(p)).obj || (await hud(p)).obj.title !== "MOVE", { moved });
+      break;
+    }
     case "STRIKE": await give("hit", 5); await give("heavy", 1); break;
     case "BLOCK": {
       const attacked = await p.waitForFunction(() => window.__duel.b.mode === "attack" && window.__duel.b.move?.id === "SLASH2", null, { timeout: 15000 }).then(() => true, () => false);

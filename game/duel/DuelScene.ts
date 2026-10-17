@@ -407,7 +407,6 @@ export class DuelScene extends Phaser.Scene {
     } else {
       const dt = Math.min(deltaMs, 50) / 1000;
       if (this.def.training && this.p.mode !== "dead") this.p.hp = Math.max(this.p.hp, 20); // tutorial mercy
-      this.movedTotal += dist(this.lastPx, this.lastPy, this.player.x, this.player.y);
       this.updatePlayer(now, dt);
       if (this.bossActive()) {
         const dd = dist(this.player.x, this.player.y, this.boss.x, this.boss.y);
@@ -424,6 +423,8 @@ export class DuelScene extends Phaser.Scene {
       this.checkWake();
       this.updateWaiters(now);
     }
+    const step = dist(this.lastPx, this.lastPy, this.player.x, this.player.y);
+    if (step < 40) this.movedTotal += step; // ignore teleports (area changes, resets)
     this.lastPx = this.player.x;
     this.lastPy = this.player.y;
     this.updateNpc(now);
