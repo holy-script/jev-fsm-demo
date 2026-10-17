@@ -1,6 +1,6 @@
 # 09. v4 plan: "ARENA" proper demo
 
-Status: **Phases 0 (assets, 9), 1 (kernel, 10), 2 (combat depth, 11) and 3 (bosses and Jev, 12) done.** Phase 4 (world) next. Decisions taken with the user: free assets only; v4 is a new route `/arena` in `game/v4/` (v3 `/duel` stays untouched and playable); the setting follows the environment packs (forest, ruined river temple, graveyard), so the v3 monastery/foundry/summit story is rewritten.
+Status: **Phases 0 (assets, 9), 1 (kernel, 10), 2 (combat depth, 11) 3 (bosses and Jev, 12) and 4 (world, 13) done.** Phase 5 (UI/UX) next. Decisions taken with the user: free assets only; v4 is a new route `/arena` in `game/v4/` (v3 `/duel` stays untouched and playable); the setting follows the environment packs (forest, ruined river temple, graveyard), so the v3 monastery/foundry/summit story is rewritten.
 
 Goal: a polished 10 to 15 minute demo where Jev is visibly the enemy's brain, with a consistent art style, better environments, richer combat (combos, reverse-animation parries, quick-time events) and a real UI.
 
@@ -202,3 +202,22 @@ Unused art: Hashashin `sp_atk` (a teleport whose art shifts position inside the 
 2. Contact sheet each attack (index-labelled frames) and read off wind-up, strike and recover frames.
 3. Add a `BossDef` in `bosses.ts`: clips, `attacks` with `hits` (`a`/`b` frames, `dmg`, `posture`, `reach`, `kind`, `around`), a `holds` entry on the telegraph frame, `perilous: true` plus a `perilous` hit for unblockable ones, a `gate(...)` for combos, a `desc` that says what the move beats and what beats it, `weights` for the rules bot, `persona`, `taunts`.
 4. Register it in `BOSSES` and `ENCOUNTERS`. Run `node tests/arena/phase3.mjs`: the data check and the every-attack check cover the new boss automatically.
+
+## 13. Phase 4 results: environments (`npm run test:arena` = 18 + 19 + 30 + 12 checks)
+
+New files: `areas.ts` (the four `AreaDef`s), `world.ts` (`AreaView`, the renderer), `tests/arena/phase4.mjs`. Changed: `bosses.ts` (`area` per boss), `ArenaScene.ts` (`buildArea`, obstacle collision in `step`, area title card), `createArenaGame.ts` (loads every env image), `tools/prep_arena_assets.py` (env stamps, fills, portal strip).
+
+**Why stamps and not Tiled maps.** Both immunitys tilesets are blob and prop sheets (organic grass, dirt and dusk patches, stone plateaus with cliff faces, free-standing trees, statues, wall pieces), not regular autotile grids. Hand-building an autotiler from them would cost far more than it adds for one-screen arenas. Instead `prep_arena_assets.py` cuts every connected piece out of four sheets (`fmt` Forgotten Memories patches, `fmp` its props, `rrp` Resurrected props, `rrw` its walls: 148 stamps, ids stable because extraction is deterministic) plus six seamless 32 px fill tiles (`fill_grass`, `fill_dirt`, `fill_dusk1`, `fill_dusk2`, `fill_plateau`, `fill_water`). To pick stamps, render an index sheet of a prefix (numbered pieces) and read the ids off it (the throwaway scripts are in the scratchpad of this phase; the pattern is: paste each stamp on a grey sheet with its index). Areas are then data, so adding or restyling one is editing a table, and Tiled/collision-polygon authoring can be added later if needed.
+
+**Composition rules.** Everything is drawn at `ENV_SCALE` 2 (same pixel size as the characters; per-stamp `s` multiplies it, 1.5 = 3x). Layers by depth: ground fill 0, water 0.5/0.6, ground patches (`g: true`, in listed order) 1+, props and fighters sorted by feet (`10 + y/100`, so characters walk behind trees and statues), particles 1800, ambient multiply rectangle 1900, vignette 1950. Floor bounds are the same in every area (`FLOOR` x 80-880, y 270-500) so combat tuning and tests do not depend on the art.
+
+| Area (boss) | Look |
+|---|---|
+| The Forest Edge (Bladekeeper) | grass, dirt arena from three overlapping dirt patches, autumn trees (willow, orange, teal, birch, pines), bushes, stump and rock obstacles, falling leaves, warm light |
+| River Shrine (Mauler) | animated water above an arched aqueduct wall with an obelisk and angel statues, a stone ring on the floor, cool light and mist |
+| Sunken Ruins (Hashashin) | dusk grass, two long arched walls and corner towers, statues, broken pillars and rocks as obstacles, dark blue light, heavy vignette |
+| Echo's Gate (Echo) | dusk ground, a ruined portal ring with the animated 32-frame portal inside it, obelisks and statues, violet light, rising motes |
+
+**Mechanics added.** Obstacles are circles on the floor plane (ellipse: depth counts for about half of width); `step()` pushes any fighter out of them, so the player, the enemy and the separation logic all respect them. Water animates by scrolling two tile sprites at different scales and speeds (the second additive). Every area gets a short title card (`?nocard=1` disables it in dev) when its boss loads, built from `name` and `subtitle`. Switching areas destroys the old view completely (12 switches leave the display list unchanged).
+
+**Rough edges / not done:** the shrine between bosses, area-to-area walking and per-area music are not built (the demo flow is fight, win, `N`); tower stamps in the ruins read as grey slabs (a better piece or a hand-placed wall would help); no dynamic lights (an additive glow sprite near candles or the portal would be cheap); the two ground patches `fmt_02` and `fmt_04` are merged components and are used as big dusk floor patches rather than clean tiles; `rrw_*` stamp ids shift if the extraction thresholds change, so re-check areas after touching `stamps(...)` arguments.

@@ -146,6 +146,71 @@ for pack in ("fm32x32", "resurected-rpg-tile", "pixel-ui-pack", "icon-pack-24x24
         shutil.copy(f, os.path.join(OUT, dest))
         man["raw"].setdefault(pack, []).append({"file": "arena-assets/raw/" + pack + "/" + rel, "size": list(Image.open(f).size)})
 
+# ---------------------------------------------------------------- environment stamps (immunitys): organic patches, props, walls
+# Both tilesets are blob/prop sheets, not regular autotile grids, so areas are composed from stamps: connected pieces cut out of the sheets
+# (ids are stable because extraction is deterministic) plus a few seamless fill tiles. docs/09 section 13 explains the approach.
+import numpy as np
+from scipy import ndimage
+
+def stamps(sheet_key, path, crop=None, min_area=300, dilate=2):
+    im = Image.open(path).convert("RGBA")
+    if crop:
+        im = im.crop(crop)
+    a = np.array(im)[:, :, 3] > 0
+    lab, n = ndimage.label(ndimage.binary_dilation(a, iterations=dilate))
+    out = []
+    for i, sl in enumerate(ndimage.find_objects(lab), 1):
+        ys, xs = sl
+        sub = im.crop((xs.start, ys.start, xs.stop, ys.stop))
+        bb = sub.getbbox()
+        if not bb or (xs.stop - xs.start) * (ys.stop - ys.start) < min_area or sum(1 for _ in [0] if np.array(sub)[:, :, 3].sum() / 255 < min_area * 0.4):
+            continue
+        sub = sub.crop(bb)
+        out.append((xs.start + bb[0], ys.start + bb[1], sub))
+    out.sort(key=lambda t: (t[1] // 48, t[0]))      # reading order by rough row
+    man.setdefault("env", {})
+    for k, (x, y, sub) in enumerate(out):
+        key = f"{sheet_key}_{k:02d}"
+        dest = f"env/{sheet_key}/{k:02d}.png"
+        os.makedirs(os.path.dirname(os.path.join(OUT, dest)), exist_ok=True)
+        sub.save(os.path.join(OUT, dest))
+        man["env"][key] = {"file": "arena-assets/" + dest, "w": sub.size[0], "h": sub.size[1], "src": [x, y]}
+    return len(out)
+
+FM = os.path.join(P4, "fm32x32", "ForgottenMemories", "ForgottenMemories")
+RR = os.path.join(P4, "resurected-rpg-tile", "Resurrected RPG 1.1", "Resurrected RPG 1.1")
+def find(base_glob):
+    f = glob.glob(base_glob, recursive=True)
+    return f[0] if f else None
+fm_dir = os.path.dirname(find(os.path.join(P4, "fm32x32", "**", "TileSet.png")) or "")
+rr_dir = os.path.dirname(find(os.path.join(P4, "resurected-rpg-tile", "**", "Props.png")) or "")
+if fm_dir and rr_dir:
+    n1 = stamps("fmt", os.path.join(fm_dir, "TileSet.png"), crop=(0, 160, 1024, 800), min_area=1500, dilate=3)   # patches and plateaus (transparent surroundings)
+    n2 = stamps("fmp", os.path.join(fm_dir, "Props.png"), min_area=120, dilate=1)
+    n3 = stamps("rrp", os.path.join(rr_dir, "Props.png"), min_area=120, dilate=1)
+    n4 = stamps("rrw", os.path.join(rr_dir, "Wall.png"), min_area=800, dilate=1)
+    print(f"env stamps: tileset {n1}, fm props {n2}, rr props {n3}, rr walls {n4}")
+    # seamless fills: 32x32 interior tiles cut from the big opaque areas
+    def tile(path, tx, ty, name, size=32):
+        im = Image.open(path).convert("RGBA").crop((tx * 32, ty * 32, tx * 32 + size, ty * 32 + size))
+        dest = f"env/fill/{name}.png"
+        os.makedirs(os.path.dirname(os.path.join(OUT, dest)), exist_ok=True)
+        im.save(os.path.join(OUT, dest))
+        man["env"][f"fill_{name}"] = {"file": "arena-assets/" + dest, "w": size, "h": size}
+    T = os.path.join(fm_dir, "TileSet.png")
+    tile(T, 12, 2, "dirt"); tile(T, 2, 2, "grass"); tile(T, 22, 2, "dusk1"); tile(T, 22, 6, "dusk2"); tile(T, 12, 12, "plateau")
+    tile(os.path.join(fm_dir, "WaterTiles-6frames.png"), 2, 9, "water")
+
+# animated portal (Resurrected RPG): a 3264x112 strip of 32 frames, used by the final area
+if rr_dir and os.path.exists(os.path.join(rr_dir, "portal-Sheet.png")):
+    pim = Image.open(os.path.join(rr_dir, "portal-Sheet.png")).convert("RGBA")
+    pn = pim.size[0] // pim.size[1] if pim.size[0] % 102 else pim.size[0] // 102
+    pw = pim.size[0] // 32
+    pframes = [pim.crop((i * pw, 0, (i + 1) * pw, pim.size[1])) for i in range(32)]
+    os.makedirs(os.path.join(OUT, "vfx"), exist_ok=True)
+    pim.save(os.path.join(OUT, "vfx", "env_portal.png"))
+    man["vfx"]["env_portal"] = info(pframes, "vfx/env_portal.png", pw, pim.size[1], {"auto": False, "confident": True, "pack": "resurected-rpg-tile", "cols": 32, "rows": 1})
+
 json.dump(man, open(os.path.join(OUT, "manifest.json"), "w"), indent=1)
 print(f"{len(man['sheets'])} character strips, {len(man['vfx'])} vfx sheets, {sum(len(v) for v in man['raw'].values())} raw images")
 for k, v in man["vfx"].items():

@@ -4,6 +4,8 @@ import {
   CLASH, COUNTER, DEATHBLOW, ENEMY, GATE_WAIT, FX, FX_EXTRA, HERO, HERO_ATTACKS, HERO_CLIPS, SCALE, SKILLS, VIEW_H, VIEW_W,
   type EnemyAttack, type HitDef, type PlayerAttack,
 } from "./data";
+import { AREAS } from "./areas";
+import { AreaView } from "./world";
 import { BOSSES, ENCOUNTERS, GENERIC_ACTIONS, type BossDef } from "./bosses";
 import { BossBrain, Telemetry, type Decision, type Snapshot } from "./brain";
 import { Fighter } from "./fighter";
@@ -58,7 +60,7 @@ export class ArenaScene extends Phaser.Scene {
   };
 
   private keys!: Record<string, Phaser.Input.Keyboard.Key>;
-  private gfx!: Phaser.GameObjects.Graphics;
+  area?: AreaView;
   private hud!: Phaser.GameObjects.Graphics;
   private texts: Record<string, Phaser.GameObjects.Text> = {};
   private clickQueued = false;
@@ -82,14 +84,13 @@ export class ArenaScene extends Phaser.Scene {
     this.dev = new URLSearchParams(window.location.search).has("dev");
     this.settings = loadSettings();
     this.cameras.main.setBackgroundColor("#101a14");
-    this.gfx = this.add.graphics().setDepth(0);
-    this.drawFloor();
     this.vfx = new Vfx(this, this.manifest.vfx);
     this.hooks = this.registry.get("hooks") as ArenaHooks | undefined;
     this.memory = loadMemory();
     this.brain = new BossBrain({ onDecision: (d) => this.onDecision(d) });
     this.player = new Fighter(this, "fk", this.manifest.sheets, HERO.radius);
     this.boss = BOSSES[new URLSearchParams(window.location.search).get("boss") ?? "mb"] ?? BOSSES.mb;
+    this.buildArea();
     this.enemy = this.makeEnemy();
     this.hud = this.add.graphics().setDepth(2000);
     const K = Phaser.Input.Keyboard.KeyCodes;
@@ -110,16 +111,8 @@ export class ArenaScene extends Phaser.Scene {
     this.reset();
     this.hooks?.onBoss?.(this.boss.name);
     if (process.env.NODE_ENV !== "production") (window as unknown as { __arena?: ArenaScene; __bosses?: typeof BOSSES }).__arena = this;
-    if (process.env.NODE_ENV !== "production") (window as unknown as { __bosses?: typeof BOSSES }).__bosses = BOSSES;
-  }
-
-  private drawFloor() {
-    const g = this.gfx;
-    g.fillStyle(0x16261c, 1).fillRect(0, 0, VIEW_W, VIEW_H);
-    g.fillStyle(0x24382a, 1).fillRect(FLOOR.l - 40, FLOOR.t - 70, FLOOR.r - FLOOR.l + 80, FLOOR.b - FLOOR.t + 90);
-    g.lineStyle(1, 0x2f4a38, 1);
-    for (let x = FLOOR.l - 40; x <= FLOOR.r + 40; x += 64) g.lineBetween(x, FLOOR.t - 70, x, FLOOR.b + 20);
-    for (let y = FLOOR.t - 70; y <= FLOOR.b + 20; y += 64) g.lineBetween(FLOOR.l - 40, y, FLOOR.r + 40, y);
+    if (process.env.NODE_ENV !== "production") (window as unknown as { __bosses?: typeof BOSSES; __areas?: typeof AREAS }).__bosses = BOSSES;
+    if (process.env.NODE_ENV !== "production") (window as unknown as { __areas?: typeof AREAS }).__areas = AREAS;
   }
 
   reset() {
@@ -179,6 +172,7 @@ export class ArenaScene extends Phaser.Scene {
     this.separate();
     this.player.tick(dt);
     this.enemy.tick(dt);
+    this.area?.update(raw);
     this.updateQte(raw);
     this.drawHud();
   }
@@ -194,6 +188,15 @@ export class ArenaScene extends Phaser.Scene {
   private step(f: Fighter, dx: number, dy: number) {
     f.x = Phaser.Math.Clamp(f.x + dx, FLOOR.l, FLOOR.r);
     f.y = Phaser.Math.Clamp(f.y + dy, FLOOR.t, FLOOR.b);
+    for (const o of this.area?.obstacles ?? []) {
+      // obstacles are ellipses on the floor plane (depth counts for about half of width)
+      const ox = f.x - o.x, oy = (f.y - o.y) / 0.55, d = Math.hypot(ox, oy), min = o.r + f.radius * 0.6;
+      if (d < min) {
+        const n = d > 0.01 ? [ox / d, oy / d] : [1, 0];
+        f.x = Phaser.Math.Clamp(o.x + n[0] * min, FLOOR.l, FLOOR.r);
+        f.y = Phaser.Math.Clamp(o.y + n[1] * min * 0.55, FLOOR.t, FLOOR.b);
+      }
+    }
   }
 
   /** Burn a pending dash (lunge / knockback) at a fixed speed. dash is signed px along x. */
@@ -639,12 +642,24 @@ export class ArenaScene extends Phaser.Scene {
     return f;
   }
 
+  private buildArea() {
+    this.area?.destroy();
+    const def = AREAS[this.boss.area];
+    this.area = new AreaView(this, def);
+    this.note("area", { id: def.id });
+    if (this.dev && new URLSearchParams(window.location.search).has("nocard")) return;
+    const t1 = this.add.text(VIEW_W / 2, 230, def.name, { fontFamily: "monospace", fontSize: "34px", color: "#f5e6c8", stroke: "#000", strokeThickness: 5 }).setOrigin(0.5).setDepth(2500).setAlpha(0);
+    const t2 = this.add.text(VIEW_W / 2, 270, def.subtitle, { fontFamily: "monospace", fontSize: "14px", color: "#cdbf9f", stroke: "#000", strokeThickness: 3 }).setOrigin(0.5).setDepth(2500).setAlpha(0);
+    this.tweens.add({ targets: [t1, t2], alpha: 1, duration: 450, hold: 1500, yoyo: true, onComplete: () => (t1.destroy(), t2.destroy()) });
+  }
+
   /** Switch to another boss and restart the fight. */
   loadBoss(id: string) {
     if (!BOSSES[id]) return;
     this.boss = BOSSES[id];
     this.enemy.sprite.destroy();
     this.enemy = this.makeEnemy();
+    this.buildArea();
     this.reset();
     this.hooks?.onBoss?.(this.boss.name);
     this.note("boss", { id });

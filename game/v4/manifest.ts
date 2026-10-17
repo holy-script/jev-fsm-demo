@@ -14,4 +14,5 @@ export interface ArenaManifest {
   vfx: Record<string, SheetInfo>;
   raw: Record<string, { file: string; size: number[] }[]>;
   chars: Record<string, string>;
+  env: Record<string, { file: string; w: number; h: number }>;
 }
