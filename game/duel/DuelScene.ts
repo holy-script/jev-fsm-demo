@@ -1,7 +1,7 @@
 import * as Phaser from "phaser";
 import { Fighter, World, angleTo, dist, inShape, type DuelManifest } from "./engine";
 import { AREAS, BOSSES, ENCOUNTERS, GAME, GLYPH, HERO, HERO_MOVES, LIGHT_CHAIN, SPIRIT, TILE, ZOOM, type AtkType, type BossDef, type AreaDef, type GateDef, type HitDef, type MoveDef, type SpawnDef } from "./data";
-import { DIFFICULTY, save, saveGame, settings } from "./settings";
+import { DIFFICULTY, save, saveGame, settings, type BossMemory } from "./settings";
 import { Vfx } from "./vfx";
 import { awardPoint, has } from "./skills";
 import { runTutorial, type TutorialHost } from "./tutorial";
@@ -237,6 +237,9 @@ export class DuelScene extends Phaser.Scene {
     this.hud.bossName = this.def.name;
     this.hud.bossSegs = this.def.segments;
     this.tel.reset();
+    this.tauntText?.destroy();
+    this.tauntText = undefined;
+    this.nextTauntAt = 0;
     this.boss.play(this.def.anims.idle, undefined, { loop: true, restart: true });
   }
 
@@ -414,6 +417,7 @@ export class DuelScene extends Phaser.Scene {
       this.updateProjectiles(now, dt);
       this.updateBeams(now);
       this.updatePillars(now);
+      this.updateTaunt(now);
       this.updateBlades(now, dt);
       this.separate(dt);
       this.checkWake();
@@ -604,6 +608,10 @@ export class DuelScene extends Phaser.Scene {
     p.thrown = false;
     this.tel.record(id === "KICK" ? "kick" : id === "WHIRL" ? "art" : id === "THROW" ? "tool" : id === "RIPOSTE" ? "riposte" : "attack", now);
     this.tel.react("attack", now);
+    if (this.bossActive() && !this.def.training && id !== "KICK") {
+      if (this.b.mode === "recover") this.tel.swings.punish++;
+      else if (this.b.mode === "attack") this.tel.swings.greedy++;
+    }
     if (id === "WHIRL") p.spirit -= SPIRIT.whirlCost;
     if (id === "THROW") p.spirit -= SPIRIT.bladeCost;
     if (id === "RIPOSTE") {
@@ -1089,6 +1097,10 @@ export class DuelScene extends Phaser.Scene {
     }
     this.tel.record("roll", now);
     this.tel.react("roll", now);
+    if (this.bossActive() && !this.def.training) {
+      const ab = angleTo(f.x, f.y, this.boss.x, this.boss.y);
+      this.tel.rollDir(dx * Math.cos(ab) + dy * Math.sin(ab));
+    }
     p.rollDir = { x: dx, y: dy };
     if (Math.abs(dx) > 0.2) f.face = dx > 0 ? 1 : -1;
     this.setP("roll");
@@ -1101,6 +1113,7 @@ export class DuelScene extends Phaser.Scene {
   private startHeal(now: number) {
     this.p.healBuf = 0;
     this.tel.record("heal", now);
+    if (this.bossActive() && !this.def.training) this.tel.heals[this.b.mode === "attack" ? "risky" : "safe"]++;
     this.setP("heal");
   }
 
@@ -1280,6 +1293,7 @@ export class DuelScene extends Phaser.Scene {
     this.hooks.onLog(`${this.def.name} defeated`);
     if (!this.def.kind || this.def.kind === "boss") awardPoint(1);
     if (!save.cleared.includes(this.def.id)) save.cleared.push(this.def.id);
+    this.remember(true);
     saveGame();
     this.boss.sprite.alpha = 1;
     const onward = () => {
@@ -1514,8 +1528,56 @@ export class DuelScene extends Phaser.Scene {
     if (d > 46) out.push("APPROACH");
     if (d < 170 && this.spaceBehind()) out.push("BACKSTEP");
     if (now >= (b.cd.GUARD ?? 0)) out.push("GUARD");
-    for (const [id, mv] of Object.entries(this.def.moves)) if (now >= (b.cd[id] ?? 0) && d <= (mv.reach ?? 90) * 1.3 && !(mv.kind === "buff" && now < b.armorUntil)) out.push(id);
+    const capped = this.unblockableStreak() >= 2;
+    for (const [id, mv] of Object.entries(this.def.moves)) {
+      if (capped && this.isUnblockable(mv)) continue; // fairness governor: no third unblockable in a row
+      if (now >= (b.cd[id] ?? 0) && d <= (mv.reach ?? 90) * 1.3 && !(mv.kind === "buff" && now < b.armorUntil)) out.push(id);
+    }
     return out;
+  }
+
+  private isUnblockable(mv: MoveDef) {
+    const t = this.moveType(mv);
+    return t === "thrust" || t === "sweep" || t === "grab" || t === "beam";
+  }
+  /** How many of the boss's last moves in a row were unblockable. Generic actions (walking, waiting) do not break the streak. */
+  private unblockableStreak() {
+    let n = 0;
+    for (let i = this.b.history.length - 1; i >= 0; i--) {
+      const mv = this.def.moves[this.b.history[i]];
+      if (!mv) continue;
+      if (!this.isUnblockable(mv)) break;
+      n++;
+    }
+    return n;
+  }
+
+  /** What this boss has learned across attempts (also saved, so it carries over a restart). */
+  private memoryOf(): BossMemory {
+    save.memory ??= {};
+    return (save.memory[this.def.id] ??= { attempts: 0, wins: 0, hitBy: {}, rolls: { toward: 0, away: 0, side: 0 }, deflects: 0, deflectLeadMs: 0 });
+  }
+  private remember(won: boolean) {
+    if (this.def.training || this.def.kind === "grunt") return;
+    const m = this.memoryOf();
+    m.attempts++;
+    if (won) m.wins++;
+    for (const [mv, s] of Object.entries(this.tel.vsMove)) if (s.hit) m.hitBy[mv] = (m.hitBy[mv] ?? 0) + s.hit;
+    for (const k of ["toward", "away", "side"] as const) m.rolls[k] += this.tel.rolls[k];
+    const n = this.tel.deflectCount;
+    if (n) {
+      m.deflectLeadMs = Math.round((m.deflectLeadMs * m.deflects + (this.tel.avgLead ?? 0) * n) / (m.deflects + n));
+      m.deflects += n;
+    }
+    saveGame();
+  }
+  private memoryForJev(): DuelSnapshot["memory"] {
+    const m = save.memory?.[this.def.id];
+    if (!m || !m.attempts) return undefined;
+    const top = Object.entries(m.hitBy).sort((a, b) => b[1] - a[1]).slice(0, 2).map(([k]) => k);
+    const r = m.rolls, tot = r.toward + r.away + r.side;
+    const usualRoll = tot >= 4 ? (Object.entries(r).sort((a, b) => b[1] - a[1])[0][0] === "side" ? "sideways" : Object.entries(r).sort((a, b) => b[1] - a[1])[0][0]) : undefined;
+    return { attempts: m.attempts, wins: m.wins, movesThatLandedMost: top, usualRoll, usualGuardTapLeadMs: m.deflects >= 3 ? m.deflectLeadMs : undefined };
   }
 
   private snapshot(now: number): DuelSnapshot {
@@ -1537,6 +1599,9 @@ export class DuelScene extends Phaser.Scene {
       recent: this.tel.recent(now, 8000),
       vsMove: this.tel.summary(),
       lastOutcome: this.tel.lastOutcome,
+      habits: this.tel.habits(),
+      memory: this.memoryForJev(),
+      fairness: { unblockableStreak: this.unblockableStreak(), unblockablesCapped: this.unblockableStreak() >= 2 },
       reachable,
       timing: { mode: settings.beat, beatMs: Math.round(this.beatMs()) },
     };
@@ -1547,6 +1612,32 @@ export class DuelScene extends Phaser.Scene {
     this.b.decision = { ...d, at: now };
     this.hud.last = `${d.source === "jev" ? "JEV" : d.source.toUpperCase()}: ${d.choice}${d.probabilities ? " " + Math.round((d.probabilities[d.choice] ?? 0) * 100) + "%" : ""}`;
     this.hooks.onDecision({ ...d, t: now });
+    if (d.taunt && d.taunt !== "NONE") this.speak(d.taunt, now);
+  }
+
+  private tauntText?: Phaser.GameObjects.Text;
+  private tauntUntil = 0;
+  private nextTauntAt = 0;
+  /** The boss speaks one of its authored lines. Jev chooses which (or silence); a cooldown keeps it rare. */
+  private speak(id: string, now: number) {
+    const line = this.def.taunts?.find((t) => t.id === id);
+    if (!line || now < this.nextTauntAt || this.p.mode === "dead" || this.dlg || this.travelling || !this.bossActive()) return;
+    this.nextTauntAt = now + 14000;
+    this.tauntUntil = now + 3200;
+    this.tauntText?.destroy();
+    this.tauntText = this.add.text(0, 0, line.text, { fontFamily: "monospace", fontSize: "9px", fontStyle: "italic", color: "#e9d9ff", stroke: "#000", strokeThickness: 3, align: "center", wordWrap: { width: 170 } })
+      .setOrigin(0.5, 1).setDepth(62).setResolution(2);
+    this.hooks.onLog(`${this.def.speaker ?? this.def.name}: "${line.text}"`);
+  }
+  private updateTaunt(now: number) {
+    const t = this.tauntText;
+    if (!t) return;
+    if (now >= this.tauntUntil || this.b.mode === "dead") {
+      t.destroy();
+      this.tauntText = undefined;
+      return;
+    }
+    t.setPosition(this.boss.x, this.boss.y - this.def.headY - 22).setAlpha(Math.min(1, (this.tauntUntil - now) / 500));
   }
 
   private ensureRequest(now: number) {
@@ -2085,6 +2176,7 @@ export class DuelScene extends Phaser.Scene {
 
     if (kind === "deflect") {
       this.tel.record("deflect", now);
+      if (!this.def.training) this.tel.deflectLead(Math.min(400, now - p.lastGuardPress));
       this.tutEvent("deflect");
       this.gainSpirit(1 + (has("echo") ? 1 : 0));
       this.openRiposte(now, SPIRIT.riposteMs);
@@ -2156,6 +2248,7 @@ export class DuelScene extends Phaser.Scene {
     this.setP("dead");
     this.player.play("dead", undefined, { restart: true });
     save.deaths++;
+    this.remember(false);
     saveGame();
     this.hud.message = "YOU DIED";
     this.hud.sub = "R to try again";

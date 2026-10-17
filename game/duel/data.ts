@@ -140,6 +140,7 @@ export interface BossDef {
   speaker?: string; // who talks in the lines below (default: its name)
   intro?: string[]; // spoken when it wakes
   outro?: string[]; // spoken as it falls
+  taunts?: { id: string; text: string; when: string }[]; // authored lines Jev may choose to have it speak
   briefing?: string[]; // the Instructor, when you arrive in its area
   area?: string; // where it is fought (default "monastery"); the tests/dev mode keep everything in the monastery map
   nativeDir?: 1 | -1; // which way the art faces (default right)
@@ -160,6 +161,13 @@ const GATE = {
 
 export const CAPTAIN: BossDef = {
   id: "captain",
+  taunts: [
+    { id: "T_ROLL", text: "Rolling again? I can count your breaths.", when: "the player keeps rolling to avoid your attacks" },
+    { id: "T_GUARD", text: "Hiding behind a shield is my trade, not yours.", when: "the player is turtling: guarding and rarely attacking" },
+    { id: "T_GREEDY", text: "Patience, pupil. Greed is a short road.", when: "the player just attacked into your move or got hit for it" },
+    { id: "T_DEFLECT", text: "Good. Again.", when: "the player just deflected your strike cleanly" },
+    { id: "T_LOW", text: "Your breath is ragged. Do you still stand?", when: "the player is low on health or posture" },
+  ],
   speaker: "THE CAPTAIN",
   intro: ["So the dust walks again.", "I led the shield wall of this monastery. I will not be led aside by a pupil of a dead master.", "Show me what the Instructor taught you."],
   outro: ["...Well struck. The dance goes on, then.", "Beware the Stone below. It forgot how to forgive."],
@@ -246,6 +254,11 @@ export const CAPTAIN: BossDef = {
 
 export const GOLEM: BossDef = {
   id: "golem",
+  taunts: [
+    { id: "T_ROLL", text: "[ the Stone Heart turns, slowly, to where you were ]", when: "the player keeps rolling" },
+    { id: "T_GUARD", text: "[ stone does not tire ]", when: "the player is turtling or stalling at range" },
+    { id: "T_LOW", text: "[ a low grinding, like laughter ]", when: "the player is low on health or posture" },
+  ],
   speaker: "THE STONE HEART",
   briefing: ["The Foundry. The Stone Heart cannot be flinched, so do not waste breath on small cuts.", "Throw its own fist back at it: deflect. Break its stone guard with heavy blows (K). And when the laser line locks, roll sideways out of it."],
   intro: ["[ stone grinds against stone ]", "THE WAY UP IS SHUT."],
@@ -320,6 +333,15 @@ export const GOLEM: BossDef = {
 
 export const BRINGER: BossDef = {
   id: "bringer",
+  taunts: [
+    { id: "T_ROLL", text: "You roll like a leaf. I am the wind.", when: "the player keeps rolling" },
+    { id: "T_GUARD", text: "Guard all you like. Death waits behind every shield.", when: "the player is turtling: mostly guarding" },
+    { id: "T_GREEDY", text: "Eager. They are always eager.", when: "the player attacks into your moves or just got hit" },
+    { id: "T_DEFLECT", text: "Pretty. Do it again.", when: "the player just deflected" },
+    { id: "T_AGAIN", text: "We have danced before. I remember your feet.", when: "the player has died to you before (see memory.attempts) and you have just started or are in a new life" },
+    { id: "T_LOW", text: "Your heart is loud. Shall I quiet it?", when: "the player is low on health or posture" },
+    { id: "T_LIFE", text: "One life gone. I have more.", when: "you have just entered a new life (segment) after being broken" },
+  ],
   speaker: "THE BRINGER OF DEATH",
   briefing: ["The Summit. He waits at the top of every story. He has three lives' worth of patience.", "He blinks behind you: turn and guard. Shadow pillars mark the ground first: roll or step out when they swell. His reaping sweep cannot be blocked: roll it."],
   intro: ["I have waited at the top of every story.", "Every hand that climbed here held a sword. Every one fell.", "Dance with me, little blade. I will remember how you move."],

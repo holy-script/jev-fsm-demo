@@ -33,18 +33,27 @@ function write(key: string, value: unknown) {
 export const settings: Settings = read("duel.settings", DEFAULTS);
 export const saveSettings = () => write("duel.settings", settings);
 
+export interface BossMemory {
+  attempts: number;
+  wins: number;
+  hitBy: Record<string, number>; // times each move has landed on the player
+  rolls: { toward: number; away: number; side: number };
+  deflects: number;
+  deflectLeadMs: number; // running average of how long before impact the player taps guard
+}
 export interface SaveData {
   cleared: string[]; // boss ids defeated
   deaths: number;
   skills: string[]; // unlocked skill ids
   points: number; // unspent skill points
   tutorialDone: boolean;
+  memory: Record<string, BossMemory>; // what each boss has learned about you across attempts
   seen: string[]; // story lines already shown (intros, outros, briefings), so retries do not replay them
 }
-const FRESH: SaveData = { cleared: [], deaths: 0, skills: [], points: 2, tutorialDone: false, seen: [] };
+const FRESH: SaveData = { cleared: [], deaths: 0, skills: [], points: 2, tutorialDone: false, seen: [], memory: {} };
 export const save: SaveData = read("duel.save", { ...FRESH });
 export const saveGame = () => write("duel.save", save);
 export const resetSave = () => {
-  Object.assign(save, { ...FRESH, cleared: [], skills: [], seen: [] });
+  Object.assign(save, { ...FRESH, cleared: [], skills: [], seen: [], memory: {} });
   saveGame();
 };

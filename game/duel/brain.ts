@@ -24,13 +24,46 @@ export class Telemetry {
   lastOutcome: { move: string; outcome: Outcome } | null = null;
   private window: { move: string; t0: number; dist0: number; first: Reaction | null } | null = null;
   private dists: { t: number; d: number }[] = [];
+  rolls = { toward: 0, away: 0, side: 0 };
+  private leadSum = 0;
+  private leadN = 0;
+  heals = { risky: 0, safe: 0 }; // risky: drunk while the boss was mid-attack
+  swings = { punish: 0, greedy: 0 }; // punish: attacked while the boss recovered; greedy: attacked into a boss attack
 
   reset() {
+    this.rolls = { toward: 0, away: 0, side: 0 };
+    this.leadSum = this.leadN = 0;
+    this.heals = { risky: 0, safe: 0 };
+    this.swings = { punish: 0, greedy: 0 };
     this.events = [];
     this.vsMove = {};
     this.lastOutcome = null;
     this.window = null;
     this.dists = [];
+  }
+
+  rollDir(rel: number) { // rel: cosine between the roll direction and the direction to the boss
+    this.rolls[rel > 0.5 ? "toward" : rel < -0.5 ? "away" : "side"]++;
+  }
+  deflectLead(ms: number) {
+    this.leadSum += ms;
+    this.leadN++;
+  }
+  get avgLead() {
+    return this.leadN ? Math.round(this.leadSum / this.leadN) : null;
+  }
+  get deflectCount() {
+    return this.leadN;
+  }
+  /** The player's habits in a few numbers, for Jev. */
+  habits() {
+    const r = this.rolls, rt = r.toward + r.away + r.side;
+    return {
+      rollDirections: rt ? { toward: r.toward, away: r.away, sideways: r.side } : undefined,
+      guardTapLeadMs: this.avgLead ?? undefined, // small = taps late (hard to beat with a long hold), large = taps early (beat it with a delayed swing)
+      healsDuringBossAttack: this.heals.risky, healsInSafeMoments: this.heals.safe,
+      attacksIntoRecovery: this.swings.punish, attacksIntoWindup: this.swings.greedy,
+    };
   }
 
   record(type: EventType, now: number) {
@@ -100,6 +133,9 @@ export interface DuelSnapshot {
   recent: ReturnType<Telemetry["recent"]>;
   vsMove: Record<string, unknown>;
   lastOutcome: { move: string; outcome: string } | null;
+  habits?: ReturnType<Telemetry["habits"]>;
+  memory?: { attempts: number; wins: number; movesThatLandedMost: string[]; usualRoll?: string; usualGuardTapLeadMs?: number };
+  fairness?: { unblockableStreak: number; unblockablesCapped: boolean };
   reachable: Record<string, boolean>;
   timing: { mode: "beat" | "classic"; beatMs: number };
   gate?: { move: string; step: number };
@@ -119,6 +155,7 @@ export interface Decision {
   choice: string;
   probabilities?: Record<string, number>;
   reads?: Reads;
+  taunt?: string; // id of the authored line Jev chose to have the boss speak (NONE = silence)
   latencyMs: number;
   source: "jev" | "rules" | "fallback";
   error?: string;
@@ -134,6 +171,8 @@ Rules you must reason with:
 - After a successful deflect or a slip the player has a short RIPOSTE window (snapshot.player.riposteReady): a fast lunging counter that deals big posture damage, so the moment after a deflect is the moment to be elsewhere, guarded, or already swinging. The player also earns spirit from deflects, which funds a spin attack (whirl) that hits all around and breaks a raised guard, and thrown blades that chip posture from range (see player.skills and recent.arts/tools).
 - A player who always answers the same way (always rolls, always deflects, always attacks first) can be punished by the move that beats that answer.
 - When snapshot.timing.mode is "beat", the fight is choreographed to a musical beat (timing.beatMs per beat): your attacks land ON the beat, and a DELAY lands half a beat OFF it. A player who taps guard on the beat deflects on-beat attacks easily but is beaten by off-beat ones.
+- snapshot.habits tells you how this player rolls (toward, away or sideways relative to you), how early they tap guard before an impact (guardTapLeadMs: a large number means they tap early, so a delayed swing beats them), whether they heal in safe moments or mid-attack, and whether they punish your recovery or attack greedily into your wind-ups. snapshot.memory, when present, is what you learned in earlier attempts against this player: use it from the very first move (open with what beat them last time).
+- snapshot.fairness: you may not throw a third unblockable move in a row; when unblockablesCapped is true those moves are simply not on offer.
 Play to win but stay unpredictable: do not repeat the same action over and over, and adapt to the habits shown in the data.`;
 
 const mechanics = (def: BossDef) => `You control ${def.name}, ${def.title}, a boss in a Sekiro-style duel against a human swordsman. ${def.persona}\n${RULES_TEXT}`;
@@ -170,6 +209,15 @@ export function idleQuestions(def: BossDef, available: string[], withReads = tru
       criteria: ["erratic, no pattern", "slight tendencies", "a clear pattern", "highly predictable, answers the same way every time"],
     },
   });
+  if (def.taunts?.length) {
+    const tc: Record<string, string> = { NONE: "Say nothing. Silence is the default; most of the time this is right." };
+    for (const t of def.taunts) tc[t.id] = `Say: "${t.text}". Use when: ${t.when}`;
+    questions.taunt = {
+      type: "choice",
+      instructions: `You may also have ${def.name} speak one short line right now. Choose silence unless a line fits the moment very well (the player just did what the line is about); speaking too often ruins it.`,
+      criteria: tc,
+    };
+  }
   return questions;
 }
 
@@ -210,7 +258,7 @@ export async function askIdle(def: BossDef, snap: DuelSnapshot, available: strin
   const a = await ask(snap, idleQuestions(def, available) as Record<string, unknown>);
   const r = a.next_action;
   if (!r?.choice || !available.includes(r.choice)) throw new Error(`Jev picked an unavailable action: ${r?.choice}`);
-  return { kind: "idle", label, choice: r.choice, probabilities: r.probabilities, reads: readsFrom(a), latencyMs: Math.round(performance.now() - t0), source: "jev" };
+  return { kind: "idle", label, choice: r.choice, probabilities: r.probabilities, reads: readsFrom(a), taunt: a.taunt?.choice, latencyMs: Math.round(performance.now() - t0), source: "jev" };
 }
 
 export async function askGate(def: BossDef, move: MoveDef, gate: GateDef, snap: DuelSnapshot, phase: 1 | 2, label: string): Promise<Decision> {
