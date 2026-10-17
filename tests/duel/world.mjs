@@ -75,4 +75,15 @@ for (let i = 0; i < 8; i++) { await p.keyboard.press("Enter"); await p.waitForTi
 const after = await p.evaluate(() => ({ dlg: window.__duel.hud.dialog, seen: JSON.parse(localStorage.getItem("duel.save")).seen }));
 check("the intro ends and is remembered in the save", after.dlg === null && after.seen.includes("intro:bone-soldier"), after);
 await p.close();
+// regression: skipping the tutorial must not mute story lines (the boss used to stay frozen forever)
+p = await game({ cleared: [], deaths: 0, skills: [], points: 2, tutorialDone: false, seen: [] });
+await p.evaluate(() => window.__duel.skipTutorial()); await p.waitForTimeout(1200);
+await p.evaluate(() => { const d = window.__duel; d.player.x = d.world.spawns.boss.x; d.player.y = d.world.arena.t + 120; });
+await p.waitForFunction(() => window.__duel.hud.dialog?.who === "BONE SOLDIER", null, { timeout: 8000 }).catch(() => {});
+const sk = await p.evaluate(() => ({ who: window.__duel.hud.dialog?.who, tut: window.__duel.tutorialOn }));
+for (let i = 0; i < 8; i++) { await p.keyboard.press("Enter"); await p.waitForTimeout(250); }
+const acts = await p.waitForFunction(() => window.__duel.b.last !== "" || window.__duel.b.mode === "attack", null, { timeout: 15000 }).then(() => true, () => false);
+check("after skipping the tutorial the Bone Soldier still speaks, then fights", sk.who === "BONE SOLDIER" && acts, { ...sk, acts, mode: await p.evaluate(() => window.__duel.b.mode) });
+await p.close();
+
 console.log(errs.join("\n") || "no page errors"); console.log(`${results.filter(Boolean).length}/${results.length} passed`); await b.close();

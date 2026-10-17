@@ -75,8 +75,8 @@ while (guard++ < 400) {
 }
 check("all twelve lessons run in order", JSON.stringify(seen) === JSON.stringify(["MOVE", "STRIKE", "BLOCK", "DEFLECT", "RIPOSTE", "SWEEP", "SLIP", "GRAB", "DEATHBLOW", "KICK", "HEAL", "THE TEST"]), seen);
 await p.waitForTimeout(2500);
-const fin = await p.evaluate(() => ({ done: JSON.parse(localStorage.getItem("duel.save")).tutorialDone, gate: window.__duel.world.gateOpen, idx: window.__duel.bossIdx, def: window.__duel.def.id, on: window.__duel.tutorialOn, awake: window.__duel.b.awake }));
-check("finishing opens the gate, saves it, and the first grunt waits asleep in the arena", fin.done === true && fin.gate === true && fin.def === "bone-soldier" && fin.awake === false && fin.on === false, fin);
+const fin = await p.evaluate(() => ({ done: JSON.parse(localStorage.getItem("duel.save")).tutorialDone, gate: window.__duel.world.gateOpen, idx: window.__duel.bossIdx, def: window.__duel.def.id, on: window.__duel.tutorialOn, awake: window.__duel.b.awake, auto: window.__duel.b.auto }));
+check("finishing opens the gate, saves it, and the first grunt waits asleep in the arena", fin.done === true && fin.gate === true && fin.def === "bone-soldier" && fin.awake === false && fin.on === false && fin.auto === true, fin);
 await p.close();
 
 // skipping from the pause menu + mercy

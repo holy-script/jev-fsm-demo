@@ -233,7 +233,7 @@ export class DuelScene extends Phaser.Scene {
     this.boss.y = home.y;
     this.boss.face = -1;
     Object.assign(this.b, { hp: this.def.segmentHp, seg: 0, posture: 0, mode: "idle", since: this.time.now, until: 0, move: null, awake: false, held: false, holdIdx: 0, cd: {}, glyph: null, last: "", nextThink: 0,
-      decision: null, asking: false, askId: this.b.askId + 1, nextAsk: 0, history: [], gates: [], moveToken: this.b.moveToken + 1, endSince: 0, res: [], armorUntil: 0, poiseUntil: 0, spawned: [], buffed: false });
+      auto: this.hud.auto, decision: null, asking: false, askId: this.b.askId + 1, nextAsk: 0, history: [], gates: [], moveToken: this.b.moveToken + 1, endSince: 0, res: [], armorUntil: 0, poiseUntil: 0, spawned: [], buffed: false });
     this.hud.bossName = this.def.name;
     this.hud.bossSegs = this.def.segments;
     this.tel.reset();
@@ -335,7 +335,7 @@ export class DuelScene extends Phaser.Scene {
     save.seen.push(key);
     saveGame();
     this.setB("recover", 1e9);
-    this.say(this.def.speaker ?? this.def.name, lines).then(after, () => {});
+    this.say(this.def.speaker ?? this.def.name, lines, true).then(after, after);
   }
 
   // ------------------------------------------------------------ helpers
@@ -771,7 +771,7 @@ export class DuelScene extends Phaser.Scene {
       if (def.briefing && !this.registry.get("dev") && !save.seen.includes(key)) {
         save.seen.push(key);
         saveGame();
-        this.time.delayedCall(1800, () => void this.say("INSTRUCTOR", def.briefing!).catch(() => {}));
+        this.time.delayedCall(1800, () => void this.say("INSTRUCTOR", def.briefing!, true).catch(() => {}));
       }
     });
   }
@@ -800,7 +800,7 @@ export class DuelScene extends Phaser.Scene {
     const n = this.nearby;
     if (n.kind === "lore") {
       this.sfx.blip("INSCRIPTION");
-      void this.say("INSCRIPTION", [n.text ?? "…"]);
+      void this.say("INSCRIPTION", [n.text ?? "…"], true);
       return;
     }
     this.rest();
@@ -854,8 +854,9 @@ export class DuelScene extends Phaser.Scene {
     p.atkBuf = p.heavyBuf = p.rollBuf = p.kickBuf = p.healBuf = p.artBuf = p.toolBuf = 0;
   }
 
-  say(who: string, lines: string[]): Promise<void> {
-    if (this.tutCancelled) return Promise.reject(new Error("cancelled"));
+  /** Tutorial lines are cancelled by "skip tutorial"; story lines (intros, briefings, inscriptions) pass `story` and always play. */
+  say(who: string, lines: string[], story = false): Promise<void> {
+    if (this.tutCancelled && !story) return Promise.reject(new Error("cancelled"));
     return new Promise((resolve) => {
       this.dlg = { lines: lines.map((text) => ({ who, text })), i: 0, shown: 0, resolve };
       this.clearInputBuffers();
