@@ -1,5 +1,6 @@
 import * as Phaser from "phaser";
 import type { DuelManifest } from "./engine";
+import { settings } from "./settings";
 
 /** Ninja Adventure samples plus a synthesised metal clang for the deflect (the parry should always ring). */
 export class Sfx {
@@ -9,7 +10,7 @@ export class Sfx {
 
   play(name: string, o: { volume?: number; rate?: number; detune?: number } = {}) {
     if (!this.manifest.audio[name]) return;
-    this.scene.sound.play(name, { volume: o.volume ?? 0.6, rate: o.rate ?? 1, detune: o.detune ?? Phaser.Math.Between(-80, 80) });
+    this.scene.sound.play(name, { volume: (o.volume ?? 0.6) * settings.sfx * 1.25, rate: o.rate ?? 1, detune: o.detune ?? Phaser.Math.Between(-80, 80) });
   }
   pick(names: string[], o: { volume?: number; rate?: number } = {}) {
     this.play(Phaser.Utils.Array.GetRandom(names), o);
@@ -22,7 +23,7 @@ export class Sfx {
     const t0 = ctx.currentTime;
     const base = Phaser.Math.Between(1500, 2000);
     const master = ctx.createGain();
-    master.gain.value = 0.32 * power;
+    master.gain.value = 0.32 * power * settings.sfx * 1.25;
     master.connect(ctx.destination);
     for (const [mul, vol, decay, type] of [[1, 1, 0.55, "triangle"], [2.76, 0.6, 0.35, "sine"], [5.4, 0.35, 0.2, "sine"], [8.93, 0.18, 0.12, "sine"]] as const) {
       const o = ctx.createOscillator();
@@ -51,7 +52,7 @@ export class Sfx {
   playMusic(name: string, volume = 0.25) {
     this.stopMusic();
     if (!this.manifest.music[name]) return;
-    this.music = this.scene.sound.add("music_" + name, { loop: true, volume: this.musicOn ? volume : 0 });
+    this.music = this.scene.sound.add("music_" + name, { loop: true, volume: this.musicOn && settings.music ? volume : 0 });
     this.music.play();
   }
   stopMusic() {

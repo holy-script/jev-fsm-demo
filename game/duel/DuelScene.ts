@@ -1,6 +1,7 @@
 import * as Phaser from "phaser";
 import { Fighter, World, angleTo, dist, inShape, type DuelManifest } from "./engine";
 import { BOSSES, GAME, GLYPH, HERO, HERO_MOVES, LIGHT_CHAIN, TILE, ZOOM, type AtkType, type BossDef, type GateDef, type HitDef, type MoveDef, type SpawnDef } from "./data";
+import { DIFFICULTY, save, saveGame, settings } from "./settings";
 import { Telemetry, askGate, askIdle, rulesGate, rulesIdle, type Decision, type DuelSnapshot, type Outcome } from "./brain";
 import { Sfx } from "./sfx";
 
@@ -101,7 +102,7 @@ export class DuelScene extends Phaser.Scene {
     this.fx = this.add.graphics().setDepth(40);
     this.glyphText = this.add.text(0, 0, "!", { fontFamily: "monospace", fontSize: "14px", color: "#fff", fontStyle: "bold" }).setOrigin(0.5).setDepth(45).setResolution(2).setVisible(false);
 
-    this.keys = this.input.keyboard!.addKeys("W,A,S,D,UP,DOWN,LEFT,RIGHT,SPACE,SHIFT,J,K,E,Q,R,M,Z,X,C,V,B,G,N,T,Y,F,ONE,TWO") as Record<string, Phaser.Input.Keyboard.Key>;
+    this.keys = this.input.keyboard!.addKeys("W,A,S,D,UP,DOWN,LEFT,RIGHT,SPACE,SHIFT,J,K,E,Q,R,M,Z,X,C,V,B,G,N,T,Y,F,ONE,TWO,ESC") as Record<string, Phaser.Input.Keyboard.Key>;
     this.input.mouse?.disableContextMenu();
     const buf = (field: "atkBuf" | "heavyBuf" | "rollBuf" | "kickBuf" | "healBuf") => () => (this.p[field] = this.time.now + 220);
     this.keys.J.on("down", buf("atkBuf"));
@@ -113,6 +114,10 @@ export class DuelScene extends Phaser.Scene {
       if (!ptr.rightButtonDown()) this.p.atkBuf = this.time.now + 220;
     });
     this.keys.R.on("down", () => this.reset(this.bossIdx));
+    this.keys.ESC.on("down", () => {
+      this.scene.launch("menu", { mode: "pause" });
+      this.scene.pause();
+    });
     this.keys.M.on("down", () => {
       this.sfx.toggleMusic();
       this.hud.music = this.sfx.musicOn;
@@ -559,7 +564,7 @@ export class DuelScene extends Phaser.Scene {
     }
 
     const armored = now < b.armorUntil;
-    b.hp -= h.damage * (armored ? 0.5 : 1);
+    b.hp -= h.damage * (armored ? 0.5 : 1) * DIFFICULTY[settings.difficulty].dealt;
     b.posture = Math.min(100, b.posture + h.posture * (armored ? 0.7 : 1));
     b.lastPostureHit = now;
     this.boss.hitFlash(70);
@@ -649,6 +654,8 @@ export class DuelScene extends Phaser.Scene {
     this.hud.sub = more ? `${BOSSES[this.bossIdx + 1].name} stirs…` : "R to fight again";
     this.sfx.playMusic("explore", 0.22);
     this.hooks.onLog(`${this.def.name} defeated`);
+    if (!save.cleared.includes(this.def.id)) save.cleared.push(this.def.id);
+    saveGame();
     if (more) this.time.delayedCall(4200, () => this.nextBoss());
   }
 
@@ -659,6 +666,9 @@ export class DuelScene extends Phaser.Scene {
   private firstAct(mv: MoveDef) {
     const fs = [...mv.hits.map((h) => h.frames[0]), ...(mv.spawns ?? []).map((x) => x.frame), ...(mv.beam ? [mv.beam.frame] : []), ...(mv.buff ? [mv.buff.frame] : [])];
     return Math.min(...fs);
+  }
+  private deflectMs() {
+    return DIFFICULTY[settings.difficulty].deflectMs;
   }
   private phase(): 1 | 2 {
     return this.b.seg >= 1 ? 2 : 1;
@@ -987,7 +997,7 @@ export class DuelScene extends Phaser.Scene {
       pr.consumed = true;
       const h: HitDef = { frames: [0, 0], type: "normal", damage: pr.dmg, posture: pr.post, deflectPosture: 0, shape: { kind: "circle", range: 0 } };
       if (this.p.mode === "guard") {
-        const inWindow = !this.p.noDeflect && now - this.p.guardSince <= GAME.deflectMs;
+        const inWindow = !this.p.noDeflect && now - this.p.guardSince <= this.deflectMs();
         if (inWindow) {
           this.tel.outcome(pr.moveId, "deflected");
           this.hurtPlayer(h, "deflect", now);
@@ -1205,7 +1215,7 @@ export class DuelScene extends Phaser.Scene {
       return this.hurtPlayer(h, "grab", now);
     }
     if (p.mode === "guard" && (h.type === "normal" || h.type === "heavy")) {
-      const inWindow = !p.noDeflect && now - p.guardSince <= GAME.deflectMs;
+      const inWindow = !p.noDeflect && now - p.guardSince <= this.deflectMs();
       b.res[i] = inWindow ? "deflected" : "blocked";
       this.tel.outcome(mv.id, b.res[i]!);
       return this.hurtPlayer(h, inWindow ? "deflect" : "block", now);
@@ -1255,7 +1265,7 @@ export class DuelScene extends Phaser.Scene {
       this.checkBossBreak(now);
       return;
     }
-    const dmgMul = this.time.now < this.b.armorUntil ? 1.25 : 1;
+    const dmgMul = (this.time.now < this.b.armorUntil ? 1.25 : 1) * DIFFICULTY[settings.difficulty].received;
     if (kind === "block") {
       p.hp -= h.damage * dmgMul * HERO.chipFraction;
       p.posture += h.posture;
@@ -1303,6 +1313,8 @@ export class DuelScene extends Phaser.Scene {
     this.p.hp = 0;
     this.setP("dead");
     this.player.play("dead", undefined, { restart: true });
+    save.deaths++;
+    saveGame();
     this.hud.message = "YOU DIED";
     this.hud.sub = "R to try again";
     this.sfx.stopMusic();

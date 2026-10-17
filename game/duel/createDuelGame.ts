@@ -1,6 +1,7 @@
 import * as Phaser from "phaser";
 import { DuelScene, type DuelHooks } from "./DuelScene";
 import { HudScene } from "./HudScene";
+import { MenuScene } from "./MenuScene";
 import { VIEW_H, VIEW_W } from "./data";
 import type { DuelManifest } from "./engine";
 
@@ -24,7 +25,9 @@ class BootScene extends Phaser.Scene {
     this.load.tilemapTiledJSON("duel_map", "/maps/duel_arena.json");
     for (const [k, f] of Object.entries(m.audio)) this.load.audio(k, "/" + f);
     for (const [k, f] of Object.entries(m.music)) this.load.audio("music_" + k, "/" + f);
-    this.load.once("complete", () => this.scene.start("duel", this.hooks));
+    const dev = typeof window !== "undefined" && new URLSearchParams(window.location.search).has("dev"); // ?dev=1 skips the title (tests)
+    this.registry.set("hooks", this.hooks);
+    this.load.once("complete", () => (dev ? this.scene.start("duel", this.hooks) : this.scene.start("menu", { mode: "title" })));
     this.load.start();
   }
 }
@@ -44,5 +47,7 @@ export function createDuelGame(parent: HTMLElement, hooks: DuelHooks) {
   game.scene.add("boot", BootScene, true, hooks);
   game.scene.add("duel", DuelScene, false);
   game.scene.add("duelhud", HudScene, false);
+  game.scene.add("menu", MenuScene, false);
+  if (process.env.NODE_ENV !== "production") (window as unknown as { __game?: Phaser.Game }).__game = game; // for scripted tests
   return () => game.destroy(true);
 }

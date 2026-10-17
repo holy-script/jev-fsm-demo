@@ -22,7 +22,7 @@ await p.route("**/api/jev/ask", async (route) => {
   }
   await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ answers }) });
 });
-await p.goto("http://localhost:3000/duel", { waitUntil: "load" });
+await p.goto("http://localhost:3000/duel?dev=1", { waitUntil: "load" });
 await p.waitForFunction(() => window.__duel?.player, null, { timeout: 30000 }); await p.waitForTimeout(800);
 const results = []; const check = (n, c, i) => { results.push(c); console.log((c ? "PASS " : "FAIL ") + n + "  " + JSON.stringify(i)); };
 const setup = async (dx = 55) => { cfg.calls = 0; await p.evaluate((dx) => { const d = window.__duel; d.hud.brain = "JEV"; d.reset(); d.debugWake(); d.b.auto = true; d.refill();
@@ -78,7 +78,7 @@ await p.keyboard.press("f");
 
 // sidebar shows reads
 await setup(); await p.waitForTimeout(1500);
-const txt = await p.locator("body").innerText();
+await p.keyboard.press("Tab"); await p.waitForTimeout(300); const txt = await p.locator("body").innerText();
 check("sidebar shows Jev's reads and decision log", /turtling/.test(txt) && /71%/.test(txt), {});
 console.log(errs.join("\n") || "no page errors"); console.log(`${results.filter(Boolean).length}/${results.length} passed`);
 await b.close();

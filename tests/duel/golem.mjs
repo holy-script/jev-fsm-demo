@@ -10,7 +10,7 @@ await p.route("**/api/jev/ask", async (route) => {
     : { gate_choice: { type: "choice", choice: cfg.gate, confidence: 0.8, probabilities: pr(cfg.gate, Object.keys(q.gate_choice.criteria)) } };
   await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ answers }) });
 });
-await p.goto("http://localhost:3000/duel", { waitUntil: "load" });
+await p.goto("http://localhost:3000/duel?dev=1", { waitUntil: "load" });
 await p.waitForFunction(() => window.__duel?.player, null, { timeout: 30000 }); await p.waitForTimeout(800);
 const results = []; const check = (n, c, i) => { results.push(c); console.log((c ? "PASS " : "FAIL ") + n + "  " + JSON.stringify(i)); };
 const st = () => p.evaluate(() => { const d = window.__duel; return { php: Math.round(d.p.hp * 10) / 10, ppost: Math.round(d.p.posture * 10) / 10, bmode: d.b.mode, bpost: Math.round(d.b.posture * 10) / 10, bhp: d.b.hp, seg: d.b.seg, projs: d.projs.length, idx: d.bossIdx }; });

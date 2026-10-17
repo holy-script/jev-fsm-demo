@@ -3,7 +3,7 @@ import { chromium } from "playwright";
 const b = await chromium.launch({ args: ["--use-gl=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"] });
 const p = await b.newPage({ viewport: { width: 1300, height: 700 } });
 const errs = []; p.on("pageerror", e => errs.push("PAGEERR: " + (e.stack || e.message).split("\n").slice(0, 3).join(" | ")));
-await p.goto("http://localhost:3000/duel", { waitUntil: "load" });
+await p.goto("http://localhost:3000/duel?dev=1", { waitUntil: "load" });
 await p.waitForFunction(() => window.__duel?.player, null, { timeout: 30000 }); await p.waitForTimeout(800);
 const DUR = Number(process.argv[2] ?? 45000);
 const BOSS = Number(process.argv[3] ?? 0); // 0 = Skeleton Captain, 1 = Golem
