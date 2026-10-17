@@ -7,7 +7,7 @@ const check = (n, c, i) => { results.push(c); console.log((c ? "PASS " : "FAIL "
 const p = await b.newPage({ viewport: { width: 1280, height: 720 } });
 p.on("pageerror", (e) => errs.push((e.stack || e.message).split("\n").slice(0, 3).join(" | ")));
 let jevCalls = 0; await p.route("**/api/jev/ask", (r) => { jevCalls++; r.abort(); });
-await p.addInitScript(() => { localStorage.setItem("duel.settings", JSON.stringify({ beat: "classic", difficulty: "duelist", music: true, sfx: 0.8 })); localStorage.setItem("duel.save", JSON.stringify({ cleared: [], deaths: 0, skills: [], points: 2, tutorialDone: true })); });
+await p.addInitScript(() => { localStorage.setItem("duel.settings", JSON.stringify({ beat: "classic", difficulty: "duelist", music: true, sfx: 0.8 })); localStorage.setItem("duel.save", JSON.stringify({ cleared: [], deaths: 0, skills: [], points: 2, tutorialDone: true, seen: ["intro:bone-soldier","outro:bone-soldier","intro:spear-bearer","outro:spear-bearer","intro:captain","outro:captain","intro:golem","outro:golem","brief:golem"] })); });
 await p.goto("http://localhost:3000/duel", { waitUntil: "load" }); await p.waitForTimeout(4500);
 await p.keyboard.press("Enter"); await p.waitForFunction(() => window.__duel?.player, null, { timeout: 20000 }); await p.waitForTimeout(800);
 const st = () => p.evaluate(() => { const d = window.__duel; return { def: d.def.id, awake: d.b.awake, mode: d.b.mode, move: d.b.move?.id, hp: d.b.hp, glyph: d.b.glyph?.type, php: Math.round(d.p.hp), pts: JSON.parse(localStorage.getItem("duel.save")).points, cleared: JSON.parse(localStorage.getItem("duel.save")).cleared, shrine: window.__game.scene.isActive("skills") }; });

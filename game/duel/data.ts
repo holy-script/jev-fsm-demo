@@ -135,6 +135,10 @@ export interface BossDef {
   tint?: number; // constant body tint (the Shade)
   training?: boolean; // cannot die, scripted by the tutorial, shows timing rings
   brain?: "jev" | "rules"; // default jev
+  speaker?: string; // who talks in the lines below (default: its name)
+  intro?: string[]; // spoken when it wakes
+  outro?: string[]; // spoken as it falls
+  briefing?: string[]; // the Instructor, when you arrive in its area
   area?: string; // where it is fought (default "monastery"); the tests/dev mode keep everything in the monastery map
   nativeDir?: 1 | -1; // which way the art faces (default right)
   anchorX?: number; // torso centre in the sprite frame, when the weapon skews the bounding box
@@ -154,6 +158,9 @@ const GATE = {
 
 export const CAPTAIN: BossDef = {
   id: "captain",
+  speaker: "THE CAPTAIN",
+  intro: ["So the dust walks again.", "I led the shield wall of this monastery. I will not be led aside by a pupil of a dead master.", "Show me what the Instructor taught you."],
+  outro: ["...Well struck. The dance goes on, then.", "Beware the Stone below. It forgot how to forgive."],
   name: "SKELETON CAPTAIN",
   title: "Shield of the Fallen",
   prefix: "cap",
@@ -237,6 +244,10 @@ export const CAPTAIN: BossDef = {
 
 export const GOLEM: BossDef = {
   id: "golem",
+  speaker: "THE STONE HEART",
+  briefing: ["The Foundry. The Stone Heart cannot be flinched, so do not waste breath on small cuts.", "Throw its own fist back at it: deflect. Break its stone guard with heavy blows (K). And when the laser line locks, roll sideways out of it."],
+  intro: ["[ stone grinds against stone ]", "THE WAY UP IS SHUT."],
+  outro: ["[ the light in its heart gutters out ]", "The summit... remembers you."],
   name: "MECHA-STONE GOLEM",
   title: "Heart of the Ruin",
   prefix: "golem",
@@ -364,6 +375,7 @@ const gcone = (range: number, half: number): Shape => ({ kind: "cone", range, ha
 
 export const GRUNT_SWORD: BossDef = {
   id: "bone-soldier", name: "BONE SOLDIER", title: "a sworn blade, long unpaid", kind: "grunt", brain: "rules",
+  speaker: "BONE SOLDIER", intro: ["...Halt. No one passes the Hall.", "Orders were never lifted. Not in a hundred years."], outro: ["...Relieved. At last."],
   prefix: "sk", scale: 1.2, headY: 70, segments: 1, segmentHp: 70, maxPosture: 100, speed: 68, radius: 8, anchorX: 44, nativeDir: 1,
   anims: { idle: "idle", walk: "walk", hit: "hit", block: "idle", dead: "dead" }, music: "castle", persona: "A simple sword skeleton.",
   dummyKeys: ["CUT", "CHOP"],
@@ -384,6 +396,7 @@ export const GRUNT_SWORD: BossDef = {
 
 export const GRUNT_SPEAR: BossDef = {
   id: "spear-bearer", name: "SPEAR BEARER", title: "keeper of the long reach", kind: "grunt", brain: "rules",
+  speaker: "SPEAR BEARER", intro: ["Another one? Then you will learn the long reach."], outro: ["Stand... down. The post is yours..."],
   prefix: "sp", scale: 1.2, headY: 70, segments: 1, segmentHp: 60, maxPosture: 100, speed: 56, radius: 8, anchorX: 45, nativeDir: 1,
   anims: { idle: "idle", walk: "walk", hit: "hit", block: "idle", dead: "dead" }, music: "castle", persona: "A spear skeleton.",
   dummyKeys: ["STAB", "JAB"],

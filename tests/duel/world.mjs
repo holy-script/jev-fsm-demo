@@ -30,7 +30,7 @@ const card = await p.evaluate(() => window.__duel.hud.card); check("crossing fro
 await p.close();
 
 // travel: Captain falls -> shrine -> Foundry
-p = await game({ cleared: ["bone-soldier", "spear-bearer"], deaths: 0, skills: [], points: 2, tutorialDone: true });
+p = await game({ cleared: ["bone-soldier", "spear-bearer"], deaths: 0, skills: [], points: 2, tutorialDone: true, seen: ["intro:captain", "outro:captain", "brief:golem"] });
 await p.evaluate(() => { const d = window.__duel; d.wake(); d.b.auto = false; d.boss.x = d.world.spawns.boss.x; d.boss.y = d.world.spawns.boss.y; d.player.x = d.boss.x - 55; d.player.y = d.boss.y; d.b.seg = 1; d.b.hp = 4; d.b.mode = "idle"; d.b.nextThink = 1e12; });
 await p.keyboard.down("j"); await p.waitForTimeout(40); await p.keyboard.up("j");
 const shrine = await p.waitForFunction(() => window.__game.scene.isActive("skills"), null, { timeout: 40000 }).then(() => true, () => false);
@@ -65,5 +65,14 @@ p = await game({ cleared: [], deaths: 0, skills: [], points: 2, tutorialDone: fa
 await p.evaluate(() => { const d = window.__duel; const sh = d.world.shrines[0]; d.player.x = sh.x - 10; d.player.y = sh.y + 14; });
 await p.waitForTimeout(400); const tut = await p.evaluate(() => ({ n: window.__duel.nearby, on: window.__duel.tutorialOn }));
 check("no shrine prompt during the tutorial", tut.on === true && tut.n === null, tut);
+await p.close();
+// story: the intro plays once, freezes the boss, and is remembered
+p = await game({ cleared: [], deaths: 0, skills: [], points: 2, tutorialDone: true, seen: [] });
+await p.evaluate(() => window.__duel.wake()); await p.waitForTimeout(300);
+const intro = await p.evaluate(() => ({ dlg: window.__duel.hud.dialog, mode: window.__duel.b.mode }));
+check("waking the Bone Soldier speaks its intro and holds its blade", intro.dlg?.who === "BONE SOLDIER" && intro.mode === "recover", intro);
+for (let i = 0; i < 8; i++) { await p.keyboard.press("Enter"); await p.waitForTimeout(250); }
+const after = await p.evaluate(() => ({ dlg: window.__duel.hud.dialog, seen: JSON.parse(localStorage.getItem("duel.save")).seen }));
+check("the intro ends and is remembered in the save", after.dlg === null && after.seen.includes("intro:bone-soldier"), after);
 await p.close();
 console.log(errs.join("\n") || "no page errors"); console.log(`${results.filter(Boolean).length}/${results.length} passed`); await b.close();

@@ -6,7 +6,7 @@ const check = (n, c, i) => { results.push(c); console.log((c ? "PASS " : "FAIL "
 async function page(skills, { dev = true, points = 0 } = {}) {
   const p = await b.newPage({ viewport: { width: 1280, height: 720 } });
   p.on("pageerror", (e) => errs.push((e.stack || e.message).split("\n").slice(0, 3).join(" | ")));
-  await p.addInitScript(([sk, pts]) => { localStorage.setItem("duel.settings", JSON.stringify({ beat: "classic", difficulty: "duelist", music: true, sfx: 0.8 })); localStorage.setItem("duel.save", JSON.stringify({ cleared: [], deaths: 0, skills: sk, points: pts, tutorialDone: true })); }, [skills, points]);
+  await p.addInitScript(([sk, pts]) => { localStorage.setItem("duel.settings", JSON.stringify({ beat: "classic", difficulty: "duelist", music: true, sfx: 0.8 })); localStorage.setItem("duel.save", JSON.stringify({ cleared: [], deaths: 0, skills: sk, points: pts, tutorialDone: true, seen: ["intro:bone-soldier","outro:bone-soldier","intro:spear-bearer","outro:spear-bearer","intro:captain","outro:captain","intro:golem","outro:golem","brief:golem"] })); }, [skills, points]);
   await p.goto("http://localhost:3000/duel" + (dev ? "?dev=1" : ""), { waitUntil: "load" });
   if (dev) { await p.waitForFunction(() => window.__duel?.player, null, { timeout: 30000 }); await p.waitForTimeout(700); }
   return p;
@@ -68,7 +68,7 @@ await key(p, "j", 30);
 const shrine = await p.waitForFunction(() => window.__game.scene.isActive("skills"), null, { timeout: 40000 }).then(() => true, () => false);
 const pts = await p.evaluate(() => JSON.parse(localStorage.getItem("duel.save")).points);
 check("after a boss falls the shrine opens (and awards a point)", shrine && pts >= 1, { shrine, pts, scenes: await p.evaluate(() => window.__game.scene.getScenes(true).map((x) => x.scene.key).join(",")), dbg: await p.evaluate(() => ({ pending: window.__duel.pendingNext, paused: window.__game.scene.isPaused("duel"), clockPaused: window.__duel.time.paused, t: Math.round(window.__duel.time.now), dev: window.__game.registry.get("dev") })), boss: await p.evaluate(() => ({ mode: window.__duel.b.mode, hp: window.__duel.b.hp, seg: window.__duel.b.seg, pmode: window.__duel.p.mode })) });
-await p.keyboard.press("Escape"); const next = await p.waitForFunction(() => window.__duel.def.id === "golem" && window.__duel.b.awake, null, { timeout: 20000 }).then(() => true, () => false);
-check("closing the shrine wakes the next boss", next, {});
+await p.keyboard.press("Escape"); const next = await p.waitForFunction(() => window.__duel.def.id === "golem" && !window.__duel.travelling, null, { timeout: 20000 }).then(() => true, () => false);
+check("closing the shrine brings the next guardian (in its own area)", next, {});
 await p.close();
 console.log(errs.join("\n") || "no page errors"); console.log(`${results.filter(Boolean).length}/${results.length} passed`); await b.close();

@@ -317,6 +317,16 @@ export class DuelScene extends Phaser.Scene {
     this.time.delayedCall(2600, () => (this.hud.message = this.p.mode === "dead" ? this.hud.message : ""));
     this.setB("recover", 900);
     this.hooks.onLog("boss awake - the gate is sealed");
+    this.story(`intro:${this.def.id}`, this.def.intro, () => this.setB("recover", 700));
+  }
+
+  /** Authored story lines, shown once per save. Skipped in dev so the scripted tests are unaffected. */
+  private story(key: string, lines: string[] | undefined, after: () => void) {
+    if (!lines || this.registry.get("dev") || save.seen.includes(key)) return after();
+    save.seen.push(key);
+    saveGame();
+    this.setB("recover", 1e9);
+    this.say(this.def.speaker ?? this.def.name, lines).then(after, () => {});
   }
 
   // ------------------------------------------------------------ helpers
@@ -740,6 +750,13 @@ export class DuelScene extends Phaser.Scene {
       this.showCard(area.name, area.zones[0].sub);
       this.cameras.main.fadeIn(900, 0, 0, 0);
       this.hooks.onLog(`arrived: ${area.name}`);
+      const def = this.seq()[idx];
+      const key = `brief:${def.id}`;
+      if (def.briefing && !this.registry.get("dev") && !save.seen.includes(key)) {
+        save.seen.push(key);
+        saveGame();
+        this.time.delayedCall(1800, () => void this.say("INSTRUCTOR", def.briefing!).catch(() => {}));
+      }
     });
   }
 
@@ -1258,10 +1275,20 @@ export class DuelScene extends Phaser.Scene {
     if (!this.def.kind || this.def.kind === "boss") awardPoint(1);
     if (!save.cleared.includes(this.def.id)) save.cleared.push(this.def.id);
     saveGame();
-    if (more) {
-      if (this.def.kind === "grunt") this.time.delayedCall(2600, () => this.nextBoss(15));
-      else this.time.delayedCall(4200, () => this.openShrine());
-    }
+    const onward = () => {
+      if (!more) return;
+      if (this.def.kind === "grunt") this.time.delayedCall(this.def.outro ? 600 : 2600, () => this.nextBoss(15));
+      else this.time.delayedCall(this.def.outro ? 1200 : 4200, () => this.openShrine());
+    };
+    const def = this.def;
+    const speak = !!def.outro && !this.registry.get("dev") && !save.seen.includes(`outro:${def.id}`);
+    if (speak) this.time.delayedCall(1400, () => {
+      if (this.p.mode === "dead" || this.def !== def) return;
+      const prev = this.b.mode;
+      this.story(`outro:${def.id}`, def.outro, onward);
+      this.b.mode = prev;
+    });
+    if (!speak) onward();
   }
 
   // ------------------------------------------------------------ boss

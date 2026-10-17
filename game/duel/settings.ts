@@ -39,11 +39,12 @@ export interface SaveData {
   skills: string[]; // unlocked skill ids
   points: number; // unspent skill points
   tutorialDone: boolean;
+  seen: string[]; // story lines already shown (intros, outros, briefings), so retries do not replay them
 }
-const FRESH: SaveData = { cleared: [], deaths: 0, skills: [], points: 2, tutorialDone: false };
+const FRESH: SaveData = { cleared: [], deaths: 0, skills: [], points: 2, tutorialDone: false, seen: [] };
 export const save: SaveData = read("duel.save", { ...FRESH });
 export const saveGame = () => write("duel.save", save);
 export const resetSave = () => {
-  Object.assign(save, { ...FRESH, cleared: [], skills: [] });
+  Object.assign(save, { ...FRESH, cleared: [], skills: [], seen: [] });
   saveGame();
 };
