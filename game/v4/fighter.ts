@@ -18,13 +18,15 @@ export class Fighter {
   private readonly fw: number;
   private readonly fh: number;
 
-  constructor(scene: Phaser.Scene, readonly prefix: string, sheets: ArenaManifest["sheets"], readonly radius: number, private nativeDir: 1 | -1 = 1) {
+  constructor(scene: Phaser.Scene, readonly prefix: string, sheets: ArenaManifest["sheets"], readonly radius: number, private nativeDir: 1 | -1 = 1, private baseTint?: number, hue?: number) {
     const idle = sheets[`${prefix}_idle`];
     this.fw = idle.frameW;
     this.fh = idle.frameH;
     this.ax = (idle.first[0] + idle.first[2]) / 2;
     this.ay = idle.first[3];
     this.sprite = scene.add.sprite(0, 0, `${prefix}_idle`, 0).setScale(SCALE).setOrigin(this.ax / this.fw, this.ay / this.fh);
+    if (baseTint !== undefined) this.sprite.setTint(baseTint);
+    if (hue !== undefined) this.sprite.preFX?.addColorMatrix().hue(hue, false); // WebGL only; canvas just shows the original colours
   }
 
   play(c: Clip, o: { loop?: boolean; onDone?: () => void } = {}) {
@@ -44,7 +46,10 @@ export class Fighter {
   /** Advance the animation and push everything to the sprite. */
   tick(dtMs: number) {
     this.anim.update(dtMs);
-    if (this.flash > 0 && (this.flash -= dtMs) <= 0) this.sprite.clearTint();
+    if (this.flash > 0 && (this.flash -= dtMs) <= 0) {
+      this.sprite.clearTint();
+      if (this.baseTint !== undefined) this.sprite.setTint(this.baseTint);
+    }
     const key = this.anim.sheet || `${this.prefix}_idle`;
     const id = `${key}#${this.anim.frame}`;
     if (id !== this.shown) {

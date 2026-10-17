@@ -5,6 +5,10 @@ import type { ArenaManifest } from "./manifest";
 
 export interface ArenaHooks {
   onMissingAssets: () => void;
+  /** every boss decision (idle or gate), for the Jev panel */
+  onDecision?: (d: import("./brain").Decision) => void;
+  onBoss?: (name: string) => void;
+  onLog?: (line: string) => void;
 }
 
 /** Loads arena-assets/manifest.json (written by tools/prep_arena_assets.py), then every sheet it names, then starts the arena. */
@@ -25,6 +29,7 @@ class BootScene extends Phaser.Scene {
     for (const [key, s] of Object.entries(m.sheets)) this.load.spritesheet(key, "/" + s.file, { frameWidth: s.frameW, frameHeight: s.frameH });
     for (const [key, s] of Object.entries(m.vfx)) this.load.spritesheet(key, "/" + s.file, { frameWidth: s.frameW, frameHeight: s.frameH });
     this.registry.set("manifest", m);
+    this.registry.set("hooks", this.hooks);
     this.load.once("complete", () => this.scene.start("arena"));
     this.load.start();
   }

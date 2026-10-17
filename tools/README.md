@@ -54,3 +54,5 @@ npm run assets:duel                                # strips + manifest, repacked
 - `python3 -I tools/arena_inventory.py [pack-substring]` prints every animation folder (frames, canvas, bbox).
 - `npm run assets:arena` builds `public/arena-assets/` (gitignored). Inspect with the dev server at `/arena/lab`.
 - Licences: chierit CC BY 4.0 (credit, no resale); pimen credit the author; immunitys edit freely, no redistribution.
+
+- Tests for v4: `npm run test:arena` (needs `npm run dev`; phase3 mocks Jev, so it costs no API calls).

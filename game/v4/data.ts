@@ -41,8 +41,19 @@ export interface PlayerAttack {
   lunge: number;
 }
 
+/** A branch point inside a multi-hit attack: after hit `afterHit` resolves the attack freezes (up to GATE_WAIT ms) while the brain
+ *  (Jev, or the rules bot) chooses how it continues. */
+export interface GateDef {
+  afterHit: number;
+  default: string;
+  options: { id: string; desc: string; phase2?: boolean }[];
+}
+
 export interface EnemyAttack {
   id: string;
+  /** what the move is, what beats it and what it beats: this text is what Jev reads */
+  desc: string;
+  gate?: GateDef;
   clip: Clip;
   hits: HitDef[];
   /** minimum distance to start it, maximum distance (the brain chooses by range) */
@@ -129,14 +140,9 @@ export const HERO_CLIPS = {
   death: { sheet: "fk_death", from: 0, to: 12, fps: 10 } as Clip,
 };
 
-/** Training enemy: Metal Bladekeeper. Its attacks are one wind-up frame then an instant strike, so the telegraph is a hold on frame 0. */
+/** Timing shared by every boss (per-boss values live in bosses.ts). */
 export const ENEMY = {
-  id: "mb",
-  name: "Metal Bladekeeper",
-  hp: 160,
   posture: 100,
-  speed: 105,
-  radius: 20,
   brokenMs: 2600,
   recoilMs: 750,
   flinchMs: 320,
@@ -144,31 +150,8 @@ export const ENEMY = {
   deathblowMult: 2.5,
   postureRegen: 14,
   postureRegenDelayMs: 1800,
-  clips: {
-    idle: { sheet: "mb_idle", from: 0, to: 7, fps: 8 } as Clip,
-    run: { sheet: "mb_run", from: 0, to: 7, fps: 14 } as Clip,
-    hit: { sheet: "mb_take_hit", from: 0, to: 5, fps: 16 } as Clip,
-    broken: { sheet: "mb_take_hit", from: 5, to: 5 } as Clip,
-    death: { sheet: "mb_death", from: 0, to: 11, fps: 10 } as Clip,
-  },
 };
-export const ENEMY_ATTACKS: Record<string, EnemyAttack> = {
-  SLASH: {
-    id: "SLASH", clip: { sheet: "mb_1_atk", from: 0, to: 5, fps: 18, holds: { 0: 520 } }, hits: [{ a: 1, b: 3, dmg: 14, posture: 18, reach: 125 }],
-    range: [0, 120], cooldownMs: 1400, lunge: 40, clashable: true,
-  },
-  TWIN: {
-    id: "TWIN", clip: { sheet: "mb_2_atk", from: 0, to: 7, fps: 18, holds: { 0: 560, 3: 150 } },
-    hits: [{ a: 1, b: 2, dmg: 10, posture: 14, reach: 125 }, { a: 4, b: 5, dmg: 12, posture: 16, reach: 135 }],
-    range: [40, 170], cooldownMs: 2000, lunge: 50, clashable: true,
-  },
-  // Perilous: ground blades erupt on both sides at frames 3-8. The telegraph is a long hold on frame 2 with a closing ring.
-  BLOOM: {
-    id: "BLOOM", clip: { sheet: "mb_sp_atk", from: 0, to: 10, fps: 16, holds: { 2: 800 } },
-    hits: [{ a: 3, b: 8, dmg: 24, posture: 20, reach: 200, band: 80, kind: "perilous", around: true }],
-    range: [0, 210], cooldownMs: 6500, lunge: 0, perilous: true,
-  },
-};
+export const GATE_WAIT = 450; // how long a poised attack waits for the branch answer before taking the default
 
 export const FX_EXTRA = {
   burst: "fire_02_explosion_2_spritesheet",

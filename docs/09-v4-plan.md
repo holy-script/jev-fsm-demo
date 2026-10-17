@@ -1,6 +1,6 @@
 # 09. v4 plan: "ARENA" proper demo
 
-Status: **Phases 0 (assets, section 9), 1 (engine kernel, section 10) and 2 (combat depth, section 11) done.** Phase 3 (bosses and Jev) next. Decisions taken with the user: free assets only; v4 is a new route `/arena` in `game/v4/` (v3 `/duel` stays untouched and playable); the setting follows the environment packs (forest, ruined river temple, graveyard), so the v3 monastery/foundry/summit story is rewritten.
+Status: **Phases 0 (assets, 9), 1 (kernel, 10), 2 (combat depth, 11) and 3 (bosses and Jev, 12) done.** Phase 4 (world) next. Decisions taken with the user: free assets only; v4 is a new route `/arena` in `game/v4/` (v3 `/duel` stays untouched and playable); the setting follows the environment packs (forest, ruined river temple, graveyard), so the v3 monastery/foundry/summit story is rewritten.
 
 Goal: a polished 10 to 15 minute demo where Jev is visibly the enemy's brain, with a consistent art style, better environments, richer combat (combos, reverse-animation parries, quick-time events) and a real UI.
 
@@ -165,3 +165,40 @@ New or changed files: `qte.ts` (pure QTE logic), `settings.ts` (QTE mode), `data
 **Spirit and the skill.** Spirit (max 5, shown as pips under the bars): +1 deflect, +1 counter, +0.5 slip, +0.25 per landed hit, +1 clash win, +1/+2 on a clean/execute deathblow. **Flame Burst** (key E, 2 spirit, `fk_sp_atk`; charge frames 1-9, fire slash 11-14, hit on 12-14) deals 24 damage and 34 posture with a pimen fire explosion on the target. It uses the same attack machinery as the chain (`startAttack(id, skill)`), so more skills are table entries.
 
 **Rough edges left for later phases:** the QTE overlay and spirit pips are placeholder drawing (Phase 5); QTE prompts are not yet beat-aware (the v3 beat grid can be reused in Phase 3 when boss music exists); only Flame Burst exists and the second element VFX (fire bolt, holy, smoke) are only hooked in `FX_EXTRA` ready for Phase 3 skills and boss moves.
+
+## 12. Phase 3 results: four bosses and Jev (`npm run test:arena` = 18 + 19 + 30 checks)
+
+**Bosses** (`bosses.ts`, `?boss=mb|cm|wh|echo`, `N` after a win loads the next, order in `ENCOUNTERS`). Each is a `BossDef`: sheet prefix, clips, `attacks` (a `Clip`, `hits`, `range`, cooldown, optional `gate`, `perilous`, `clashable`, and a `desc` that Jev reads), rules-bot `weights` by distance band, `persona`, `taunts`, `phase2` multipliers.
+
+| Boss | HP | Character | Moves |
+|---|---|---|---|
+| Metal Bladekeeper (mb) | 160 | Patient duellist, one-frame wind-ups, long holds | SLASH, TWIN (gate), FLURRY (gate, heavy finisher), BLOOM (perilous) |
+| Crystal Mauler (cm) | 230 | Slow and heavy, big radius | SWING, BACKHAND, SLAM (gate, then perilous crystals), SHATTER (perilous wall) |
+| Wind Hashashin (wh) | 150 | Fast with a very short tell, around-you hits | FLICK, WHIRL (gate), CYCLONE (gate, three hits) |
+| Echo (echo) | 200 | The player's own clips (fk_*) recoloured by a WebGL hue rotation; the final boss | CUT, CHAIN (gate), EMBER (perilous fire arc) |
+
+Unused art: Hashashin `sp_atk` (a teleport whose art shifts position inside the frame: needs a teleport primitive), Mauler `defend` (a crystal shell), Metal Bladekeeper projectile and trap (need entities).
+
+**Phase 2** (below `phase2.hpPct`, 50%): the boss moves faster, cooldowns shrink, hold times shrink, announced once.
+
+**The brain** (`brain.ts`). `Telemetry` records the player's recent actions, how each boss move was answered (deflected, blocked, dodged, countered, hit) and the player's first reaction within 900 ms, roll directions, guard-tap lead before deflects, and swings into recovery or wind-up. `idleQuestions` builds one call: `next_action` (choice over the legal options, each with its move description and reach), four `noul` reads (turtling, roll-reliant, trade-hungry, panicking) and a `taunt` choice (`NONE` is the default; 14 s cooldown). `gateQuestions` builds the branch question. `BossBrain` owns the Jev/rules switch (`F`), the in-flight request (`askId` makes late answers harmless), stats per source, and the timeouts: an idle boss waits at most `ASK_TIMEOUT` (1.5 s wall clock) before the rules bot decides; answers older than 3.5 s are dropped; a pick that is no longer legal when consumed falls back to rules.
+
+**Latency hiding.** `enemyThink` builds a snapshot and calls `brain.request` while the boss is still in its post-attack pause, then `brain.take` when the pause ends. Generic actions (APPROACH, BACKSTEP, WAIT) are real actions the engine executes for a fixed time. Measured against the real API: about 330 ms per call, no errors in 40 calls over four bosses.
+
+**Legal options only.** `availableActions` offers an attack only if the player is inside its `range`, depth is within 45 px, it is off cooldown, and the fairness rule allows it (a third perilous move in a row is not offered). Distance 190 px offers APPROACH but not SLASH.
+
+**Gates.** After hit `afterHit` of a multi-hit attack resolves (and the boss is still attacking, not parried or clashed) the animation freezes up to `GATE_WAIT` (450 ms) while `brain.gate` answers. CONTINUE = nothing; DELAY = hold 350 ms (beats early guard taps); **FEINT = the swing is rewound with `anim.reverseTo`**, no later hits, the boss returns to idle (bait); END = stop. No answer in time = the attack's default. Measured with the real model: it uses DELAY on the Mauler's slam against a stationary player.
+
+**Memory.** On victory or death the fight is stored (`memory.ts`, localStorage `arena.memory`): attempts, wins, how many times each move landed, habits. The next fight's snapshot carries `memory` (moves that landed most, usual roll direction, usual guard lead). **Echo** additionally gets `snapshot.profile` aggregated over every other boss and a persona that tells it to use those habits.
+
+**UI.** `/arena` has a basic Jev panel (Tab, closed by default, covers part of the playfield so it is a placeholder for Phase 5): per-decision source, latency, probabilities, Jev's reads, fallback count.
+
+**Tests.** `tests/arena/phase3.mjs` mocks `/api/jev/ask` with `page.route` (the same technique as `tests/duel/jev-gates.mjs`) and also validates every boss clip and hit window against the real sheets, and plays every attack of every boss to completion. `window.__arena` and `window.__bosses` are exposed outside production.
+
+**Known gaps:** a stale pick is replaced by a rules pick rather than remembered as an intent (v3 has the intent trick); boss HP and damage are first-pass numbers (a balance pass belongs after Phase 5 with human play-testing, using a scripted bot like v3's `bot.mjs`); Jev leans on WAIT with a stationary player, so the WAIT description now says to use it rarely; boss intros and outros (`intro`, `outro` in `BossDef`) are not displayed until Phase 5; no audio.
+
+### Recipe: add a boss
+1. Art: add the pack to `tools/prep_arena_assets.py` `CHARS` (a unique prefix) and run `npm run assets:arena`. Check it in `/arena/lab`.
+2. Contact sheet each attack (index-labelled frames) and read off wind-up, strike and recover frames.
+3. Add a `BossDef` in `bosses.ts`: clips, `attacks` with `hits` (`a`/`b` frames, `dmg`, `posture`, `reach`, `kind`, `around`), a `holds` entry on the telegraph frame, `perilous: true` plus a `perilous` hit for unblockable ones, a `gate(...)` for combos, a `desc` that says what the move beats and what beats it, `weights` for the rules bot, `persona`, `taunts`.
+4. Register it in `BOSSES` and `ENCOUNTERS`. Run `node tests/arena/phase3.mjs`: the data check and the every-attack check cover the new boss automatically.

@@ -1,12 +1,16 @@
 import * as Phaser from "phaser";
 import { chip, inReach, pressGuard, resolveEnemyHit, type Defender, type Outcome } from "./combat";
 import {
-  CLASH, COUNTER, DEATHBLOW, ENEMY, ENEMY_ATTACKS, FX, FX_EXTRA, HERO, HERO_ATTACKS, HERO_CLIPS, SCALE, SKILLS, VIEW_H, VIEW_W,
+  CLASH, COUNTER, DEATHBLOW, ENEMY, GATE_WAIT, FX, FX_EXTRA, HERO, HERO_ATTACKS, HERO_CLIPS, SCALE, SKILLS, VIEW_H, VIEW_W,
   type EnemyAttack, type HitDef, type PlayerAttack,
 } from "./data";
+import { BOSSES, ENCOUNTERS, GENERIC_ACTIONS, type BossDef } from "./bosses";
+import { BossBrain, Telemetry, type Decision, type Snapshot } from "./brain";
 import { Fighter } from "./fighter";
+import { loadMemory, memoryFor, profile, remember, saveMemory, type MemoryStore } from "./memory";
 import { MashRun, QteRun, type DeathblowGrade } from "./qte";
 import { loadSettings, type ArenaSettings } from "./settings";
+import type { ArenaHooks } from "./createArenaGame";
 import type { ArenaManifest } from "./manifest";
 import { Vfx } from "./vfx";
 
@@ -49,8 +53,8 @@ export class ArenaScene extends Phaser.Scene {
     hurtUntil: 0, lastHitAt: -1e9, riposteUntil: 0, spirit: 0, counterAt: -1e9, def: { guarding: false, guardPressedAt: -1e9, noDeflect: false, invulnerable: false } as Defender,
   };
   e = {
-    hp: ENEMY.hp, posture: 0, mode: "idle" as EMode, auto: true, atk: null as EnemyAttack | null, hitDone: [] as boolean[], thinkAt: 0,
-    cd: {} as Record<string, number>, recoilUntil: 0, brokenUntil: 0, poiseUntil: 0, lastHitAt: -1e9, dash: 0, reverseFrames: 0, reversedAttack: "", strikeAt: 0,
+    hp: 160, posture: 0, mode: "idle" as EMode, auto: true, atk: null as EnemyAttack | null, hitDone: [] as boolean[], thinkAt: 0,
+    cd: {} as Record<string, number>, action: null as { id: string; until: number } | null, lastActions: [] as string[], gate: null as { a: EnemyAttack; startedAt: number; decision: string | null; token: number } | null, resumeAt: 0, feinting: false, phase2: false, recoilUntil: 0, brokenUntil: 0, poiseUntil: 0, lastHitAt: -1e9, dash: 0, reverseFrames: 0, reversedAttack: "", strikeAt: 0,
   };
 
   private keys!: Record<string, Phaser.Input.Keyboard.Key>;
@@ -59,6 +63,15 @@ export class ArenaScene extends Phaser.Scene {
   private texts: Record<string, Phaser.GameObjects.Text> = {};
   private clickQueued = false;
   private manifest!: ArenaManifest;
+  boss!: BossDef;
+  brain!: BossBrain;
+  telemetry = new Telemetry();
+  memory: MemoryStore = {};
+  hooks?: ArenaHooks;
+  private gateToken = 0;
+  private standingStill = 0;
+  private lastTaunt = -1e9;
+  private remembered = false;
 
   constructor() {
     super("arena");
@@ -72,13 +85,17 @@ export class ArenaScene extends Phaser.Scene {
     this.gfx = this.add.graphics().setDepth(0);
     this.drawFloor();
     this.vfx = new Vfx(this, this.manifest.vfx);
+    this.hooks = this.registry.get("hooks") as ArenaHooks | undefined;
+    this.memory = loadMemory();
+    this.brain = new BossBrain({ onDecision: (d) => this.onDecision(d) });
     this.player = new Fighter(this, "fk", this.manifest.sheets, HERO.radius);
-    this.enemy = new Fighter(this, "mb", this.manifest.sheets, ENEMY.radius);
+    this.boss = BOSSES[new URLSearchParams(window.location.search).get("boss") ?? "mb"] ?? BOSSES.mb;
+    this.enemy = this.makeEnemy();
     this.hud = this.add.graphics().setDepth(2000);
     const K = Phaser.Input.Keyboard.KeyCodes;
     const kb = this.input.keyboard!;
     this.keys = Object.fromEntries(
-      Object.entries({ W: K.W, A: K.A, S: K.S, D: K.D, UP: K.UP, DOWN: K.DOWN, LEFT: K.LEFT, RIGHT: K.RIGHT, J: K.J, K: K.K, SPACE: K.SPACE, SHIFT: K.SHIFT, L: K.L, E: K.E, P: K.P, O: K.O, I: K.I, R: K.R }).map(([n, c]) => [n, kb.addKey(c)]),
+      Object.entries({ W: K.W, A: K.A, S: K.S, D: K.D, UP: K.UP, DOWN: K.DOWN, LEFT: K.LEFT, RIGHT: K.RIGHT, J: K.J, K: K.K, SPACE: K.SPACE, SHIFT: K.SHIFT, L: K.L, E: K.E, F: K.F, N: K.N, P: K.P, O: K.O, I: K.I, R: K.R }).map(([n, c]) => [n, kb.addKey(c)]),
     );
     kb.addCapture("SPACE,UP,DOWN,LEFT,RIGHT");
     this.input.on("pointerdown", () => (this.clickQueued = true));
@@ -91,7 +108,9 @@ export class ArenaScene extends Phaser.Scene {
     t("qtemsg", VIEW_W / 2, 110, 16, "#ffd166", 0.5);
     this.texts.help.setText("WASD move   J/click attack (press again in the chain window)   Space guard (tap just before a hit = PARRY)   Shift roll   E flame burst (2 spirit)" + (this.dev ? "   P ai  O/I enemy attacks  R reset" : "   R reset"));
     this.reset();
-    if (process.env.NODE_ENV !== "production") (window as unknown as { __arena?: ArenaScene }).__arena = this;
+    this.hooks?.onBoss?.(this.boss.name);
+    if (process.env.NODE_ENV !== "production") (window as unknown as { __arena?: ArenaScene; __bosses?: typeof BOSSES }).__arena = this;
+    if (process.env.NODE_ENV !== "production") (window as unknown as { __bosses?: typeof BOSSES }).__bosses = BOSSES;
   }
 
   private drawFloor() {
@@ -116,7 +135,12 @@ export class ArenaScene extends Phaser.Scene {
     this.player.anim.speed = 1;
     this.enemy.anim.speed = 1;
     Object.assign(this.p.def, { guarding: false, guardPressedAt: -1e9, noDeflect: false, invulnerable: false });
-    Object.assign(this.e, { hp: ENEMY.hp, posture: 0, mode: "idle", atk: null, hitDone: [], thinkAt: 1200, cd: {}, recoilUntil: 0, brokenUntil: 0, poiseUntil: 0, lastHitAt: -1e9, dash: 0, reverseFrames: 0, reversedAttack: "", strikeAt: 0 });
+    Object.assign(this.e, { hp: this.boss.hp, posture: 0, mode: "idle", atk: null, hitDone: [], thinkAt: 1200, cd: {}, recoilUntil: 0, brokenUntil: 0, poiseUntil: 0, lastHitAt: -1e9, dash: 0, reverseFrames: 0, reversedAttack: "", strikeAt: 0, action: null, lastActions: [], gate: null, resumeAt: 0, feinting: false, phase2: false });
+    this.telemetry.reset();
+    this.brain.reset();
+    this.gateToken++;
+    this.standingStill = 0;
+    this.remembered = false;
     this.player.x = 330;
     this.player.y = 400;
     this.player.face = 1;
@@ -126,7 +150,7 @@ export class ArenaScene extends Phaser.Scene {
     this.player.sprite.clearTint();
     this.enemy.sprite.clearTint();
     this.player.play({ ...HERO_CLIPS.idle }, { loop: true });
-    this.enemy.play({ ...ENEMY.clips.idle }, { loop: true });
+    this.enemy.play({ ...this.boss.clips.idle }, { loop: true });
   }
 
   note(type: string, extra: Record<string, unknown> = {}) {
@@ -146,6 +170,8 @@ export class ArenaScene extends Phaser.Scene {
     this.now += dt;
     if (Phaser.Input.Keyboard.JustDown(this.keys.R)) this.reset();
     if (Phaser.Input.Keyboard.JustDown(this.keys.P)) this.e.auto = !this.e.auto;
+    if (Phaser.Input.Keyboard.JustDown(this.keys.F)) this.popup(this.enemy.x, this.enemy.y - 170, `brain: ${this.brain.toggle() === "jev" ? "JEV" : "RULES"}`, "#58a6ff");
+    if (Phaser.Input.Keyboard.JustDown(this.keys.N) && this.e.mode === "dead") this.nextBoss();
     if (Phaser.Input.Keyboard.JustDown(this.keys.O)) this.forceEnemyAttack("SLASH");
     if (Phaser.Input.Keyboard.JustDown(this.keys.I)) this.forceEnemyAttack("TWIN");
     this.updatePlayer(dt);
@@ -184,7 +210,7 @@ export class ArenaScene extends Phaser.Scene {
     const dx = this.enemy.x - this.player.x;
     const dy = (this.enemy.y - this.player.y) * 2.2;
     const d = Math.hypot(dx, dy);
-    const min = HERO.radius + ENEMY.radius;
+    const min = HERO.radius + this.boss.radius;
     if (d < min && d > 0.01) {
       const push = (min - d) / 2;
       const ux = dx / d, uy = dy / d / 2.2;
@@ -203,6 +229,21 @@ export class ArenaScene extends Phaser.Scene {
       skill: Phaser.Input.Keyboard.JustDown(this.keys.E),
     };
     if (press.attack) p.counterAt = this.now; // a perilous strike landing within COUNTER ms of this is countered
+    if (press.attack) {
+      this.telemetry.react("attack", this.now);
+      this.telemetry.record("attack", this.now);
+      const em = this.e.mode;
+      if (em === "attack" && this.e.atk && this.enemy.anim.frame < this.e.atk.hits[0].a) this.telemetry.swings.greedy++;
+      else if (em === "idle" || em === "recoil" || em === "flinch" || em === "broken") this.telemetry.swings.punish++;
+    }
+    if (press.guard) {
+      this.telemetry.react("guard", this.now);
+      this.telemetry.record("guard", this.now);
+    }
+    if (press.roll) {
+      this.telemetry.react("roll", this.now);
+      this.telemetry.record("roll", this.now);
+    }
     this.clickQueued = false;
     const guardHeld = this.keys.SPACE.isDown || this.keys.K.isDown;
     const rollT = this.now - p.rollStart;
@@ -216,6 +257,7 @@ export class ArenaScene extends Phaser.Scene {
 
     switch (p.mode) {
       case "free": {
+        this.standingStill = this.dirInput().any ? 0 : this.standingStill + dt;
         if (press.roll && this.now >= p.rollCdUntil) return this.startRoll(dir);
         if (press.guard) return this.startGuard();
         if (press.skill) return this.startSkill("FLAME");
@@ -274,6 +316,7 @@ export class ArenaScene extends Phaser.Scene {
     const p = this.p, sk = SKILLS[id];
     if (p.spirit < sk.cost || this.e.mode === "dead") return;
     p.spirit -= sk.cost;
+    this.telemetry.record("skill", this.now);
     this.startAttack(id, sk);
     this.note("skill", { id, spirit: p.spirit });
   }
@@ -285,6 +328,10 @@ export class ArenaScene extends Phaser.Scene {
     p.atk = null;
     p.rollStart = this.now;
     p.rollDir = dir.any ? { x: dir.x, y: dir.y } : { x: -this.player.face, y: 0 };
+    {
+      const ex = this.enemy.x - this.player.x, ey = this.enemy.y - this.player.y, m = Math.hypot(ex, ey) || 1;
+      this.telemetry.rollDir((p.rollDir.x * ex + p.rollDir.y * ey) / m);
+    }
     this.player.play(HERO_CLIPS.roll);
     this.note("roll");
   }
@@ -334,7 +381,7 @@ export class ArenaScene extends Phaser.Scene {
 
   /** Do not lunge through the enemy. */
   private reachableLunge(px: number) {
-    const gap = Math.abs(this.enemy.x - this.player.x) - (HERO.radius + ENEMY.radius);
+    const gap = Math.abs(this.enemy.x - this.player.x) - (HERO.radius + this.boss.radius);
     return Phaser.Math.Clamp(gap, 0, px);
   }
 
@@ -348,7 +395,7 @@ export class ArenaScene extends Phaser.Scene {
         return;
       }
       if (this.e.mode === "dead") return;
-      if (inReach(this.player.x, this.player.y, this.player.face, this.enemy.x, this.enemy.y, h.reach, h.band ?? 38, ENEMY.radius)) {
+      if (inReach(this.player.x, this.player.y, this.player.face, this.enemy.x, this.enemy.y, h.reach, h.band ?? 38, this.boss.radius)) {
         p.hitDone[i] = true;
         this.playerHitsEnemy(a, h, i);
       }
@@ -386,7 +433,7 @@ export class ArenaScene extends Phaser.Scene {
     if (e.mode !== "attack" && e.mode !== "broken" && e.mode !== "recoil" && this.now >= e.poiseUntil) {
       e.mode = "flinch";
       e.poiseUntil = this.now + ENEMY.poiseMs;
-      this.enemy.play(ENEMY.clips.hit, { onDone: () => e.mode === "flinch" && ((e.mode = "idle"), (e.thinkAt = this.now + 300)) });
+      this.enemy.play(this.boss.clips.hit, { onDone: () => e.mode === "flinch" && ((e.mode = "idle"), (e.thinkAt = this.now + 300)) });
     }
     e.dash += this.player.face * (h.kind === "heavy" ? 26 : 8);
   }
@@ -394,7 +441,7 @@ export class ArenaScene extends Phaser.Scene {
   // ---------------------------------------------------------------- enemy
   forceEnemyAttack(id: string) {
     if (this.e.mode === "dead" || this.e.mode === "broken") return;
-    this.startEnemyAttack(ENEMY_ATTACKS[id]);
+    this.startEnemyAttack(this.boss.attacks[id]);
   }
 
   private startEnemyAttack(a: EnemyAttack) {
@@ -402,9 +449,13 @@ export class ArenaScene extends Phaser.Scene {
     e.mode = "attack";
     e.atk = a;
     e.hitDone = a.hits.map(() => false);
-    e.cd[a.id] = this.now + a.cooldownMs;
+    e.cd[a.id] = this.now + a.cooldownMs * (this.phase() === 2 ? this.boss.phase2.cooldown : 1);
     this.enemy.face = this.player.x >= this.enemy.x ? 1 : -1;
-    this.enemy.play(a.clip, {
+    const hm = this.phase() === 2 ? this.boss.phase2.hold : 1;
+    const holds = Object.fromEntries(Object.entries(a.clip.holds ?? {}).map(([k, v]) => [k, v * hm]));
+    e.feinting = false;
+    this.telemetry.attackStart(a.id, this.now);
+    this.enemy.play({ ...a.clip, holds }, {
       onDone: () => {
         if (e.mode !== "attack") return;
         e.mode = "idle";
@@ -413,7 +464,8 @@ export class ArenaScene extends Phaser.Scene {
       },
     });
     let lead = 0;
-    for (let f = a.clip.from; f < a.hits[0].a; f++) lead += 1000 / (a.clip.fps ?? 12) + (a.clip.holds?.[f] ?? 0);
+    const pi = Math.max(0, a.hits.findIndex((h) => h.kind === "perilous"));
+    for (let f = a.clip.from; f < a.hits[pi].a; f++) lead += 1000 / (a.clip.fps ?? 12) + (holds[f] ?? 0);
     e.strikeAt = this.now + lead;
     this.popup(this.enemy.x, this.enemy.y - 135, a.perilous ? "!!" : "!", a.perilous ? "#ff3b3b" : "#ff5d5d");
     this.note("enemyAttack", { id: a.id, strikeAt: Math.round(e.strikeAt) });
@@ -425,35 +477,38 @@ export class ArenaScene extends Phaser.Scene {
     this.burn(f, e, dt);
     if (e.mode === "dead") return;
     if (e.mode !== "attack" && e.mode !== "recoil" && e.mode !== "broken") f.face = this.player.x >= f.x ? 1 : -1;
+    if (!e.phase2 && this.phase() === 2 && e.hp > 0) {
+      e.phase2 = true;
+      this.popup(this.enemy.x, this.enemy.y - 175, "PHASE 2", "#ff9f43");
+      this.note("phase2");
+    }
+    if (e.gate) return this.updateGate();
+    if (e.resumeAt && this.now >= e.resumeAt) {
+      e.resumeAt = 0;
+      f.anim.speed = 1;
+    }
     switch (e.mode) {
       case "idle": {
         if (!e.auto || this.p.mode === "dead") {
-          f.ensure(ENEMY.clips.idle);
+          f.ensure(this.boss.clips.idle);
           break;
         }
-        const dx = this.player.x - f.x, dy = this.player.y - f.y;
-        const dist = Math.abs(dx);
-        const choices = Object.values(ENEMY_ATTACKS).filter((a) => dist >= a.range[0] && dist <= a.range[1] && Math.abs(dy) < 40 && this.now >= (e.cd[a.id] ?? 0));
-        if (this.now >= e.thinkAt && choices.length) {
-          this.startEnemyAttack(choices[Math.floor(Math.random() * choices.length)]);
-          break;
-        }
-        if (dist > 110 || Math.abs(dy) > 30) {
-          const m = Math.hypot(dx, dy) || 1;
-          this.step(f, dist > 110 ? ((dx / m) * ENEMY.speed * dt) / 1000 : 0, ((dy / m) * ENEMY.speed * 0.6 * dt) / 1000);
-          f.ensure(ENEMY.clips.run);
-        } else f.ensure(ENEMY.clips.idle);
+        this.enemyThink(dt);
         break;
       }
       case "attack": {
-        const a = e.atk!;
+        if (e.feinting || !e.atk) break;
+        const a = e.atk;
         const frame = f.anim.frame;
-        a.hits.forEach((h, i) => {
-          if (e.hitDone[i] || frame < h.a) return;
+        for (let i = 0; i < a.hits.length; i++) {
+          const h = a.hits[i];
+          if (e.hitDone[i] || frame < h.a) continue;
           e.hitDone[i] = true;
           if (i === 0) e.dash += f.face * this.enemyLunge(a.lunge);
           this.enemyHits(a, h, i);
-        });
+          if (a.gate && a.gate.afterHit === i && e.mode === "attack" && this.qteKind !== "clash") this.startGate(a);
+          break; // one hit per frame so a gate can interrupt before the next
+        }
         break;
       }
       case "recoil": {
@@ -476,7 +531,7 @@ export class ArenaScene extends Phaser.Scene {
   }
 
   private enemyLunge(px: number) {
-    const gap = Math.abs(this.player.x - this.enemy.x) - (HERO.radius + ENEMY.radius);
+    const gap = Math.abs(this.player.x - this.enemy.x) - (HERO.radius + this.boss.radius);
     return Phaser.Math.Clamp(gap, 0, px);
   }
 
@@ -484,9 +539,10 @@ export class ArenaScene extends Phaser.Scene {
     const f = this.enemy, p = this.p;
     const inRange = inReach(f.x, f.y, f.face, this.player.x, this.player.y, h.reach, h.band ?? 38, HERO.radius, h.around);
     if (a.clashable && inRange && p.mode === "attack" && p.atk && !p.recovering && this.playerInStrike()) return this.startClash(a, h, i);
-    const countered = a.perilous === true && this.now - p.counterAt <= HERO.counterMs;
+    const countered = h.kind === "perilous" && this.now - p.counterAt <= HERO.counterMs;
     const out: Outcome = resolveEnemyHit(p.def, this.now, h, inRange, countered);
     this.note("enemyHit", { id: a.id, hit: i, outcome: out, frame: f.anim.frame });
+    this.telemetry.outcome(a.id, out);
     const mid = { x: (this.player.x + f.x) / 2, y: this.player.y - 40 * SCALE * 0.6 };
     switch (out) {
       case "missed":
@@ -506,6 +562,8 @@ export class ArenaScene extends Phaser.Scene {
         this.vfx.play(FX.sparkParry, mid.x, mid.y, { scale: 1.6, flip: f.face > 0 });
         this.vfx.play(FX.smear, mid.x, mid.y - 6, { scale: 1.4, flip: f.face < 0, tint: 0x8fd3ff, add: true });
         this.popup(this.player.x, this.player.y - 130, "PARRY", "#8fd3ff");
+        this.telemetry.deflectLead(this.now - p.def.guardPressedAt);
+        this.telemetry.record("deflect", this.now);
         p.spirit = Math.min(HERO.spirit, p.spirit + HERO.spiritDeflect);
         break;
       case "countered":
@@ -513,6 +571,7 @@ export class ArenaScene extends Phaser.Scene {
         this.vfx.play(FX.sparkParry, this.enemy.x, mid.y, { scale: 2.2, flip: f.face > 0 });
         this.vfx.play(FX_EXTRA.holy, this.enemy.x, mid.y - 10, { scale: 1.4, add: true });
         this.popup(this.player.x, this.player.y - 140, "COUNTER", "#ffd166");
+        this.telemetry.record("counter", this.now);
         p.spirit = Math.min(HERO.spirit, p.spirit + HERO.spiritCounter);
         break;
       case "blocked": {
@@ -542,6 +601,7 @@ export class ArenaScene extends Phaser.Scene {
         this.hitstop = Math.max(this.hitstop, 80);
         this.shake(0.006, 140);
         this.popup(this.player.x, this.player.y - 130, String(h.dmg), "#ff6b6b");
+        this.telemetry.record("hurt", this.now);
         if (p.hp <= 0) return this.killPlayer();
         p.mode = "hurt";
         p.hurtUntil = this.now + HERO.hurtMs;
@@ -561,7 +621,7 @@ export class ArenaScene extends Phaser.Scene {
     e.reverseFrames = f.anim.reverseTo(a.clip.from, 300, () => {
       if (e.mode !== "recoil") return;
       if (e.posture >= ENEMY.posture) this.breakEnemy();
-      else f.play(ENEMY.clips.broken, { loop: true });
+      else f.play(this.boss.clips.broken, { loop: true });
     });
     e.dash += -f.face * 34;
     e.posture = Math.min(100, e.posture + posture);
@@ -570,6 +630,186 @@ export class ArenaScene extends Phaser.Scene {
     this.hitstop = Math.max(this.hitstop, 120);
     this.shake(0.004, 120);
     void h;
+  }
+
+
+  // ---------------------------------------------------------------- bosses and the brain
+  private makeEnemy() {
+    const f = new Fighter(this, this.boss.prefix, this.manifest.sheets, this.boss.radius, this.boss.nativeDir, this.boss.tint, this.boss.hue);
+    return f;
+  }
+
+  /** Switch to another boss and restart the fight. */
+  loadBoss(id: string) {
+    if (!BOSSES[id]) return;
+    this.boss = BOSSES[id];
+    this.enemy.sprite.destroy();
+    this.enemy = this.makeEnemy();
+    this.reset();
+    this.hooks?.onBoss?.(this.boss.name);
+    this.note("boss", { id });
+  }
+  nextBoss() {
+    const i = ENCOUNTERS.indexOf(this.boss.id);
+    this.loadBoss(ENCOUNTERS[(i + 1) % ENCOUNTERS.length]);
+  }
+
+  phase(): 1 | 2 {
+    return this.e.hp / this.boss.hp <= this.boss.phase2.hpPct ? 2 : 1;
+  }
+
+  private onDecision(d: Decision) {
+    this.hooks?.onDecision?.(d);
+    this.note("decision", { kind: d.kind, choice: d.choice, source: d.source, ms: d.latencyMs, error: d.error });
+  }
+
+  private commitMemory(won: boolean) {
+    if (this.remembered) return;
+    this.remembered = true;
+    remember(this.memory, this.boss.id, won, this.telemetry.landed, this.telemetry.habits());
+    saveMemory(this.memory);
+  }
+
+  private say(text: string) {
+    this.popup(this.enemy.x, this.enemy.y - 175, `"${text}"`, "#e6edf3");
+    this.note("taunt", { text });
+  }
+
+  /** Attacks Jev may pick right now (in range, off cooldown, fairness) plus the generic movement actions. */
+  availableActions(): string[] {
+    const e = this.e, f = this.enemy;
+    const dist = Math.abs(this.player.x - f.x), dy = Math.abs(this.player.y - f.y);
+    const last2 = e.lastActions.slice(-2).map((id) => this.boss.attacks[id]?.perilous);
+    const capped = last2.length === 2 && last2.every(Boolean);
+    const out: string[] = [];
+    for (const a of Object.values(this.boss.attacks)) {
+      if (dist < a.range[0] || dist > a.range[1] || dy > 45 || this.now < (e.cd[a.id] ?? 0)) continue;
+      if (a.perilous && capped) continue;
+      out.push(a.id);
+    }
+    if (dist > 100 || dy > 35) out.push("APPROACH");
+    if (dist < 150) out.push("BACKSTEP");
+    out.push("WAIT");
+    return out;
+  }
+
+  snapshot(available: string[], gate?: EnemyAttack): Snapshot {
+    const e = this.e, p = this.p;
+    const dist = Math.round(Math.abs(this.player.x - this.enemy.x));
+    const reachable: Record<string, boolean> = {};
+    for (const a of Object.values(this.boss.attacks)) reachable[a.id] = available.includes(a.id);
+    const last = e.lastActions;
+    let streak = 0;
+    for (let i = last.length - 1; i >= 0 && last[i] === last[last.length - 1]; i--) streak++;
+    const lastTwo = last.slice(-2).map((id) => this.boss.attacks[id]?.perilous);
+    const snap: Snapshot = {
+      boss: { name: this.boss.name, phase: this.phase(), hpPct: Math.round((e.hp / this.boss.hp) * 100), posturePct: Math.round(e.posture), mode: e.mode, lastActions: last.slice(-5), sameActionStreak: streak },
+      player: { hpPct: Math.round((p.hp / HERO.hp) * 100), posturePct: Math.round(p.posture), spirit: Math.floor(p.spirit), state: p.mode, distancePx: dist, guardHeld: p.def.guarding, riposteReady: this.now < p.riposteUntil, standingStillMs: Math.round(this.standingStill) },
+      recent: this.telemetry.recent(this.now, 8000),
+      vsMove: this.telemetry.summary(),
+      lastOutcome: this.telemetry.lastOutcome,
+      habits: this.telemetry.habits(),
+      memory: memoryFor(this.memory, this.boss.id),
+      reachable,
+      fairness: { perilousStreak: lastTwo.filter(Boolean).length, perilousCapped: lastTwo.length === 2 && lastTwo.every(Boolean) },
+    };
+    if (this.boss.id === "echo") snap.profile = profile(this.memory);
+    if (gate) snap.gate = { move: gate.id, afterHit: gate.gate?.afterHit ?? 0 };
+    return snap;
+  }
+
+  /** Idle: pick the next action. The answer is requested while the boss is still recovering so it is usually ready when the pause ends. */
+  private enemyThink(dt: number) {
+    const e = this.e, f = this.enemy;
+    const dx = this.player.x - f.x, dy = this.player.y - f.y, dist = Math.abs(dx);
+    const spd = this.boss.speed * (this.phase() === 2 ? this.boss.phase2.speed : 1);
+    // an ongoing walk / wait / backstep
+    if (e.action) {
+      const act = e.action;
+      if (act.id === "APPROACH") {
+        const m = Math.hypot(dx, dy) || 1;
+        this.step(f, dist > 90 ? ((dx / m) * spd * dt) / 1000 : 0, ((dy / m) * spd * 0.6 * dt) / 1000);
+        f.ensure(this.boss.clips.run);
+        if ((dist <= 100 && Math.abs(dy) <= 30) || this.now >= act.until) e.action = null;
+      } else if (act.id === "BACKSTEP") {
+        this.step(f, (-Math.sign(dx) * spd * 0.9 * dt) / 1000, 0);
+        f.ensure(this.boss.clips.run);
+        if (this.now >= act.until) e.action = null;
+      } else {
+        f.ensure(this.boss.clips.idle);
+        if (this.now >= act.until) e.action = null;
+      }
+      if (!e.action) e.thinkAt = this.now + 150;
+      return;
+    }
+    f.ensure(this.boss.clips.idle);
+    const avail = this.availableActions();
+    if (this.brain.needsRequest) this.brain.request(this.boss, this.snapshot(avail), avail);
+    if (this.now < e.thinkAt) return;
+    const d = this.brain.take(this.boss, this.snapshot(avail), avail);
+    if (!d) return;
+    this.applyDecision(d);
+  }
+
+  private applyDecision(d: Decision) {
+    const e = this.e, a = this.boss.attacks[d.choice];
+    e.lastActions.push(d.choice);
+    if (e.lastActions.length > 12) e.lastActions.shift();
+    if (d.taunt && d.taunt !== "NONE" && this.now - this.lastTaunt > 14000) {
+      const t = this.boss.taunts?.find((x) => x.id === d.taunt);
+      if (t) {
+        this.lastTaunt = this.now;
+        this.say(t.text);
+      }
+    }
+    if (a) return this.startEnemyAttack(a);
+    if (!(d.choice in GENERIC_ACTIONS)) return;
+    const ms = d.choice === "APPROACH" ? 1600 : d.choice === "BACKSTEP" ? 450 : 650;
+    e.action = { id: d.choice, until: this.now + ms };
+  }
+
+  // ---------------------------------------------------------------- combo gates
+  private startGate(a: EnemyAttack) {
+    const e = this.e, f = this.enemy;
+    f.anim.speed = 0;
+    const token = ++this.gateToken;
+    e.gate = { a, startedAt: performance.now(), decision: null, token };
+    const snap = this.snapshot(this.availableActions(), a);
+    this.brain.gate(this.boss, a, a.gate!, snap, this.phase()).then((d) => {
+      if (e.gate && e.gate.token === token) e.gate.decision = d.choice;
+    });
+    this.note("gateStart", { id: a.id });
+  }
+
+  private updateGate() {
+    const e = this.e, f = this.enemy, g = e.gate!;
+    if (e.mode !== "attack") {
+      e.gate = null;
+      f.anim.speed = 1;
+      return;
+    }
+    if (!g.decision && performance.now() - g.startedAt < GATE_WAIT) return;
+    e.gate = null;
+    const choice = g.decision ?? g.a.gate!.default;
+    this.note("gate", { id: g.a.id, choice, timedOut: g.decision === null });
+    f.anim.speed = 1;
+    if (choice === "DELAY") {
+      f.anim.speed = 0;
+      e.resumeAt = this.now + 350;
+    } else if (choice === "FEINT") {
+      e.feinting = true;
+      f.anim.reverseTo(g.a.clip.from, 300, () => {
+        if (e.mode !== "attack") return;
+        e.mode = "idle";
+        e.atk = null;
+        e.feinting = false;
+        e.thinkAt = this.now + 450;
+      });
+    } else if (choice === "END") {
+      e.mode = "idle";
+      e.atk = null;
+      e.thinkAt = this.now + 500;
+    }
   }
 
   // ---------------------------------------------------------------- quick-time events
@@ -669,7 +909,7 @@ export class ArenaScene extends Phaser.Scene {
     if (e.hp <= 0) return this.killEnemy();
     e.mode = "flinch";
     e.poiseUntil = this.now + 1400;
-    this.enemy.play(ENEMY.clips.hit, { onDone: () => e.mode === "flinch" && ((e.mode = "idle"), (e.thinkAt = this.now + 500)) });
+    this.enemy.play(this.boss.clips.hit, { onDone: () => e.mode === "flinch" && ((e.mode = "idle"), (e.thinkAt = this.now + 500)) });
   }
 
   private finishClash() {
@@ -713,7 +953,7 @@ export class ArenaScene extends Phaser.Scene {
     e.brokenUntil = this.now + ENEMY.brokenMs;
     e.posture = ENEMY.posture;
     e.atk = null;
-    this.enemy.play(ENEMY.clips.broken, { loop: true });
+    this.enemy.play(this.boss.clips.broken, { loop: true });
     this.popup(this.enemy.x, this.enemy.y - 150, "POSTURE BROKEN", "#ff9f43");
     this.note("enemyBroken");
   }
@@ -729,8 +969,9 @@ export class ArenaScene extends Phaser.Scene {
   }
   private killEnemy() {
     this.e.mode = "dead";
-    this.enemy.play(ENEMY.clips.death);
-    this.popup(this.enemy.x, this.enemy.y - 150, "VICTORY", "#ffd166");
+    this.enemy.play(this.boss.clips.death);
+    this.popup(this.enemy.x, this.enemy.y - 150, "VICTORY  (N: next)", "#ffd166");
+    this.commitMemory(true);
     this.note("enemyDead");
   }
   private killPlayer() {
@@ -738,6 +979,7 @@ export class ArenaScene extends Phaser.Scene {
     this.p.def.guarding = false;
     this.player.play(HERO_CLIPS.death);
     this.popup(this.player.x, this.player.y - 150, "YOU DIED (R)", "#ff6b6b");
+    this.commitMemory(false);
     this.note("playerDead");
   }
 
@@ -759,7 +1001,7 @@ export class ArenaScene extends Phaser.Scene {
     };
     bar(40, VIEW_H - 80, 260, 12, p.hp / HERO.hp, 0xd1453b);
     bar(40, VIEW_H - 62, 260, 6, p.posture / HERO.posture, p.mode === "hurt" && p.posture >= 44 ? 0xff9f43 : 0xe3b341);
-    bar(VIEW_W / 2 - 200, 40, 400, 12, e.hp / ENEMY.hp, 0xb02a37);
+    bar(VIEW_W / 2 - 200, 40, 400, 12, e.hp / this.boss.hp, 0xb02a37);
     bar(VIEW_W / 2 - 200, 58, 400, 6, e.posture / ENEMY.posture, e.mode === "broken" ? 0xff5d5d : 0xe3b341);
     // spirit pips
     for (let i = 0; i < HERO.spirit; i++) {
@@ -801,7 +1043,7 @@ export class ArenaScene extends Phaser.Scene {
       g.fillStyle(0xffd166, 1).fillRect(cx - 80, cy - 6, 160 * Math.min(1, m.count / Math.max(1, m.need)), 18);
       this.texts.qtemsg.setText("CLASH: mash J!");
     }
-    this.texts.enemyName.setText(ENEMY.name);
+    this.texts.enemyName.setText(`${this.boss.name}, ${this.boss.title}`);
     this.texts.combo.setText(p.chain > 1 ? `x${p.chain}` : "");
     if (this.dev) this.texts.debug.setText(`p:${p.mode} chain:${p.chain} hp:${Math.round(p.hp)} post:${Math.round(p.posture)} | e:${e.mode} hp:${e.hp} post:${Math.round(e.posture)} ai:${e.auto} | ${this.player.anim.sheet}#${this.player.anim.frame}`);
   }
