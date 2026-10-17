@@ -1,6 +1,6 @@
 # 09. v4 plan: "ARENA" proper demo
 
-Status: **Phases 0 (assets, section 9) and 1 (engine kernel, section 10) done.** Phase 2 (combat depth, QTE) next. Decisions taken with the user: free assets only; v4 is a new route `/arena` in `game/v4/` (v3 `/duel` stays untouched and playable); the setting follows the environment packs (forest, ruined river temple, graveyard), so the v3 monastery/foundry/summit story is rewritten.
+Status: **Phases 0 (assets, section 9), 1 (engine kernel, section 10) and 2 (combat depth, section 11) done.** Phase 3 (bosses and Jev) next. Decisions taken with the user: free assets only; v4 is a new route `/arena` in `game/v4/` (v3 `/duel` stays untouched and playable); the setting follows the environment packs (forest, ruined river temple, graveyard), so the v3 monastery/foundry/summit story is rewritten.
 
 Goal: a polished 10 to 15 minute demo where Jev is visibly the enemy's brain, with a consistent art style, better environments, richer combat (combos, reverse-animation parries, quick-time events) and a real UI.
 
@@ -149,3 +149,19 @@ Playable: Fire Knight vs a Metal Bladekeeper training enemy on a flat floor (`/a
 **Authoring a hit window.** Use the frame-index contact sheets: render the sheet's frames with indices (script pattern in the scratchpad this phase: crop each frame to the sheet bbox, label with the index) and pick `a..b` as the frames where the weapon smear is in front of the body. Mb attacks have a single wind-up frame 0 and strike at frame 1, so the telegraph is `holds: {0: 520}`. Hits resolve once, the first update in which the animation has reached frame `a` (so a coarse tick cannot skip a window).
 
 **Known rough edges, deliberately left for later phases:** floor is a flat procedural grid (Phase 4), HUD is plain bars and text (Phase 5), the enemy has two attacks and a trivial approach/attack AI with no Jev yet (Phase 3), no sound (v3's `sfx.ts` will be reused), no QTE (Phase 2), bodies can overlap briefly after knockback, and deflecting the *second* hit of TWIN (a longer reverse) is not covered by a test yet.
+
+## 11. Phase 2 results: combat depth (same route, `npm run test:arena` = 18 + 19 checks)
+
+New or changed files: `qte.ts` (pure QTE logic), `settings.ts` (QTE mode), `data.ts` (SKILLS, DEATHBLOW, CLASH, COUNTER, BLOOM attack, `perilous`/`clashable`/`around` flags), `combat.ts` (`perilous` kind, `countered` outcome, `around` reach), `ArenaScene.ts` (time scale, QTE input routing, new methods), `tests/arena/phase2.mjs`.
+
+**Time model.** `update` has a raw delta and a simulated one. `timeScale` (1 normally, 0.22 in a deathblow QTE, 0.15 in a clash) scales the simulation (animation, `now`, enemy brain) but the QTE timers and inputs run on the raw delta, so slow motion changes the look and not the difficulty. Hit-stop zeroes the simulated delta.
+
+**Deathblow QTE** (`qte.ts` `QteRun`). When the enemy is `broken` and the player presses attack within 170 px, the knight steps in, time slows and three prompts appear (J, K or L, shown in a ring that closes over `DEATHBLOW.windowMs` 720 ms). A press within 110 ms of the close is *perfect*, within 260 ms *good*; earlier presses (mashing), the wrong key or no press are *miss*. All perfect = **execute** (70 damage, fk_3_atk finisher 16-27 with a fire explosion, +2 spirit), at least two of three perfect/good = **clean** (45, fk_2_atk 7-15, +1 spirit), else **scuffed** (20, fk_1_atk). Settings (`arena.settings`, or `?qte=on|assist|off`): `assist` stretches window and tolerance x1.6, `off` skips the QTE and a hit on a broken enemy is the plain x2.5 deathblow. `scene.qteKeys` forces the keys for tests.
+
+**Perilous counter.** `ENEMY_ATTACKS.BLOOM` (mb_sp_atk, ground blades on both sides, 24 damage) is `kind: "perilous"`: guard does nothing. A closing red ring and "!!" telegraph it; it turns white inside the counter window. Pressing **attack** within `HERO.counterMs` (200 ms) before the strike frame = **countered** (reverse parry reaction, enemy posture +45, +1 spirit, holy flash); rolling through = **slip** (enemy posture +20, +0.5 spirit); anything else takes the full hit. The ring length comes from `strikeAt`, which `startEnemyAttack` computes from the clip's frame times and holds, so every perilous attack needs only `holds` on its telegraph frame.
+
+**Clash** (`MashRun`). If a `clashable` enemy hit connects while the player is inside the strike frames of their own swing, both freeze and the player mashes J (7 presses in 1.1 s, 4 in assist, none in off). Win = reverse reaction on the enemy (+22 posture and the hit's own), +1 spirit, the player's swing resumes. Lose = half damage, +26 posture, knockback, hurt stagger.
+
+**Spirit and the skill.** Spirit (max 5, shown as pips under the bars): +1 deflect, +1 counter, +0.5 slip, +0.25 per landed hit, +1 clash win, +1/+2 on a clean/execute deathblow. **Flame Burst** (key E, 2 spirit, `fk_sp_atk`; charge frames 1-9, fire slash 11-14, hit on 12-14) deals 24 damage and 34 posture with a pimen fire explosion on the target. It uses the same attack machinery as the chain (`startAttack(id, skill)`), so more skills are table entries.
+
+**Rough edges left for later phases:** the QTE overlay and spirit pips are placeholder drawing (Phase 5); QTE prompts are not yet beat-aware (the v3 beat grid can be reused in Phase 3 when boss music exists); only Flame Burst exists and the second element VFX (fire bolt, holy, smoke) are only hooked in `FX_EXTRA` ready for Phase 3 skills and boss moves.

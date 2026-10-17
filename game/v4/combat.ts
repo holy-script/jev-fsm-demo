@@ -1,7 +1,7 @@
 import { HERO, type HitDef } from "./data";
 
 /** Pure combat rules (no Phaser) so the suites can exercise them directly through window.__arena. */
-export type Outcome = "dodged" | "deflected" | "blocked" | "hit" | "missed";
+export type Outcome = "dodged" | "deflected" | "blocked" | "hit" | "missed" | "countered";
 
 export interface Defender {
   guarding: boolean;
@@ -14,16 +14,18 @@ export interface Defender {
 }
 
 /** Is the target inside the attacker's reach? Forward ellipse: `reach` ahead of the attacker, a little behind, `band` of depth tolerance. */
-export function inReach(ax: number, ay: number, face: 1 | -1, tx: number, ty: number, reach: number, band: number, pad: number): boolean {
+export function inReach(ax: number, ay: number, face: 1 | -1, tx: number, ty: number, reach: number, band: number, pad: number, around = false): boolean {
   const fx = (tx - ax) * face;
+  if (around) return Math.abs(tx - ax) <= reach + pad && Math.abs(ty - ay) <= band + pad * 0.5;
   return fx >= -pad && fx <= reach + pad && Math.abs(ty - ay) <= band + pad * 0.5;
 }
 
 /** What happens when an enemy hit connects with a defender at scene time `now`. */
-export function resolveEnemyHit(d: Defender, now: number, hit: HitDef, inRangeNow: boolean): Outcome {
+export function resolveEnemyHit(d: Defender, now: number, hit: HitDef, inRangeNow: boolean, countered = false): Outcome {
   if (!inRangeNow) return "missed";
   if (d.invulnerable) return "dodged";
   const kind = hit.kind ?? "normal";
+  if (kind === "perilous") return countered ? "countered" : "hit"; // guard does nothing against a perilous attack
   if (d.guarding && kind !== "sweep") {
     const fresh = now - d.guardPressedAt <= HERO.deflectMs;
     return fresh && !d.noDeflect ? "deflected" : "blocked";

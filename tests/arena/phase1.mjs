@@ -78,7 +78,7 @@ const rip = s.log.filter((l) => l.type === "playerHit")[0];
 check("riposte after deflect: L1 deals 12 (8 x1.5)", enemyHitOutcome(s) === "deflected" && rip && rip.dmg === 12 && rip.riposte, { rip });
 
 // I: posture break after a deflect, then a hit is a deathblow (x2.5)
-await setup(); await p.evaluate(() => (window.__arena.e.posture = 90)); await enemyAttack("SLASH"); await waitSim(470); await key("Space", 120);
+await setup(); await p.evaluate(() => { window.__arena.settings.qte = "off"; window.__arena.e.posture = 90; }); await enemyAttack("SLASH"); await waitSim(470); await key("Space", 120);
 await p.waitForFunction(() => window.__arena.e.mode === "broken", null, { timeout: 3000, polling: "raf" });
 await key("j", 30); await p.waitForTimeout(500); s = await st();
 const db = s.log.filter((l) => l.type === "playerHit").pop();
