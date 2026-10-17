@@ -13,6 +13,12 @@ export default function Home() {
           Side-view hack &amp; slash. Four bosses with their own state machines (Slime, Fire Worm, Evil Wizard, Bringer of Death), each driven by Jev.
         </div>
       </Link>
+      <Link href="/duel" style={card}>
+        <b>Posture Duel</b>
+        <div style={{ opacity: 0.7, fontSize: 13, marginTop: 6 }}>
+          Sekiro-style duel on a large top-down map: deflect, posture bars, deathblows, perilous attacks. Jev picks the boss's moves, branches its combos and reads your play style.
+        </div>
+      </Link>
       <Link href="/basic" style={card}>
         <b>Basic duel (v1)</b>
         <div style={{ opacity: 0.7, fontSize: 13, marginTop: 6 }}>Top-down shooter duel against a Jev-driven enemy with six states.</div>

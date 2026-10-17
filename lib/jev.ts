@@ -11,8 +11,18 @@ export class JevError extends Error {
   }
 }
 
-/** Ask Jev to pick one of `criteria` (name -> when it applies) given arbitrary JSON `state`. */
-export async function jevChoice(state: unknown, instructions: string, criteria: Record<string, string>): Promise<JevChoice> {
+export type JevQuestion =
+  | { type: "choice"; instructions: string; criteria: Record<string, string> }
+  | { type: "noul"; instructions: string; criteria?: { true?: string; false?: string } }
+  | { type: "score"; instructions: string; criteria: string[] };
+
+export type JevAnswer =
+  | { type: "choice"; choice: string; confidence: number; probabilities: Record<string, number> }
+  | { type: "noul"; noul: number }
+  | { type: "score"; score: number; confidence: number; probabilities: Record<string, number> };
+
+/** One /v1/systemone call with any mix of questions about the same `state`. */
+export async function jevAsk(state: unknown, questions: Record<string, JevQuestion>): Promise<Record<string, JevAnswer>> {
   const apiKey = process.env.TYPESAFE_API_KEY;
   const baseUrl = process.env.TYPESAFE_BASE_URL;
   const model = process.env.JEV_MODEL;
@@ -27,20 +37,27 @@ export async function jevChoice(state: unknown, instructions: string, criteria: 
       method: "POST",
       signal: ctrl.signal,
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({ model, state, questions: { decision: { type: "choice", instructions, criteria } } }),
+      body: JSON.stringify({ model, state, questions }),
     });
     if (!res.ok) throw new JevError(`Jev HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`, 502);
-    const ans = (await res.json())?.answers?.decision;
-    if (!ans?.choice || !(ans.choice in criteria)) {
-      throw new JevError(`Unexpected Jev reply: ${JSON.stringify(ans).slice(0, 160)}`, 502);
-    }
-    return { choice: ans.choice, confidence: ans.confidence ?? 0, probabilities: ans.probabilities ?? {} };
+    const answers = (await res.json())?.answers;
+    if (!answers) throw new JevError("Unexpected Jev reply: no answers", 502);
+    return answers;
   } catch (e) {
     if (e instanceof JevError) throw e;
     throw new JevError(e instanceof Error && e.name === "AbortError" ? "Jev timed out" : String(e), 504);
   } finally {
     clearTimeout(timer);
   }
+}
+
+/** Ask Jev to pick one of `criteria` (name -> when it applies) given arbitrary JSON `state`. */
+export async function jevChoice(state: unknown, instructions: string, criteria: Record<string, string>): Promise<JevChoice> {
+  const ans = (await jevAsk(state, { decision: { type: "choice", instructions, criteria } })).decision;
+  if (ans?.type !== "choice" || !(ans.choice in criteria)) {
+    throw new JevError(`Unexpected Jev reply: ${JSON.stringify(ans).slice(0, 160)}`, 502);
+  }
+  return { choice: ans.choice, confidence: ans.confidence ?? 0, probabilities: ans.probabilities ?? {} };
 }
 
 export const topProbabilities = (p: Record<string, number>, n = 3) =>

@@ -8,3 +8,4 @@ next-env.d.ts
 # third-party itch.io packs (personal use; do not redistribute)
 assets/
 public/game-assets/
+public/duel-assets/

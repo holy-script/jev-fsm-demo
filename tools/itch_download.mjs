@@ -2,15 +2,32 @@ import { chromium } from "playwright";
 import fs from "fs";
 // Downloads the free itch.io packs the game uses into assets/_dl (gitignored). Usage: node tools/itch_download.mjs
 // Then: npm run assets   (unzips nothing - see tools/README.md for the unzip one-liner)
-const OUT = new URL("../assets/_dl", import.meta.url).pathname;
-const urls = [
-  "https://luizmelo.itch.io/hero-knight-2",
-  "https://luizmelo.itch.io/monsters-creatures-fantasy-2",
-  "https://luizmelo.itch.io/fire-worm",
-  "https://luizmelo.itch.io/evil-wizard-3",
-  "https://luizmelo.itch.io/tiny-platformer-hills-asset-pack",
-  "https://clembod.itch.io/bringer-of-death-free",
-];
+// Usage: node tools/itch_download.mjs [boss-rush|duel]   (default boss-rush)
+const SETS = {
+  "boss-rush": {
+    out: "../assets/_dl",
+    urls: [
+      "https://luizmelo.itch.io/hero-knight-2",
+      "https://luizmelo.itch.io/monsters-creatures-fantasy-2",
+      "https://luizmelo.itch.io/fire-worm",
+      "https://luizmelo.itch.io/evil-wizard-3",
+      "https://luizmelo.itch.io/tiny-platformer-hills-asset-pack",
+      "https://clembod.itch.io/bringer-of-death-free",
+    ],
+  },
+  duel: {
+    out: "../assets/_dl2",
+    urls: [
+      "https://szadiart.itch.io/hero-and-opponents-animation",
+      "https://pixel-boy.itch.io/ninja-adventure-asset-pack",
+      "https://darkpixel-kronovi.itch.io/mecha-golem-free",
+    ],
+  },
+};
+const set = SETS[process.argv[2] ?? "boss-rush"];
+if (!set) throw new Error("unknown set; use: " + Object.keys(SETS).join(", "));
+const OUT = new URL(set.out, import.meta.url).pathname;
+const urls = set.urls;
 const b = await chromium.launch();
 const ctx = await b.newContext({ acceptDownloads: true });
 for (const u of urls) {
