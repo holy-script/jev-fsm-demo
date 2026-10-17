@@ -23,6 +23,7 @@ interface Beam { x: number; y: number; ang: number; until: number; len: number; 
 interface GateRt { def: GateDef; requested: boolean; asking: boolean; ans: string | null; applied: boolean }
 const GATE_WAIT = 450; // how long a poised boss waits for Jev's branch answer before taking the default
 const ASK_TIMEOUT = 1500;
+const CAPTAIN_STEP = (speed: number) => speed * 0.55; // speed of the post-string recoil step
 
 type PMode = "free" | "guard" | "attack" | "roll" | "kick" | "heal" | "hurt" | "broken" | "dead";
 type BMode = "idle" | "move" | "attack" | "recover" | "guard" | "flinch" | "broken" | "dead";
@@ -74,7 +75,7 @@ export class DuelScene extends Phaser.Scene {
     cd: {} as Record<string, number>, poiseUntil: 0, armorUntil: 0, spawned: [] as boolean[], buffed: false, last: "", sounded: false, glyph: null as { type: keyof typeof GLYPH; until: number } | null, moveDir: 0,
     decision: null as (Decision & { at: number }) | null, asking: false, askId: 0, askedAt: 0, nextAsk: 0,
     moveKind: "approach" as "approach" | "backstep" | "circle", circleDir: 1 as 1 | -1, history: [] as string[],
-    gates: [] as GateRt[], moveToken: 0, endSince: 0, res: [] as (Outcome | null)[],
+    gates: [] as GateRt[], plan: null as number[] | null, moveToken: 0, endSince: 0, res: [] as (Outcome | null)[],
   };
   private tel = new Telemetry();
   private moving = false;
@@ -471,7 +472,7 @@ export class DuelScene extends Phaser.Scene {
     this.setP(mode);
     f.face = this.bossActive() ? (this.boss.x >= f.x ? 1 : -1) : f.face;
     p.dir = this.bossActive() ? this.aimAtBoss() : f.face > 0 ? 0 : Math.PI;
-    f.play(mv.anim, mv.fps, { restart: true });
+    f.play(mv.anim, mv.fps * (this.beatMode() ? 0.85 : 1), { restart: true }); // a touch slower in choreographed mode
     this.sfx.swing(id === "D");
   }
 
@@ -690,6 +691,54 @@ export class DuelScene extends Phaser.Scene {
     const fs = [...mv.hits.map((h) => h.frames[0]), ...(mv.spawns ?? []).map((x) => x.frame), ...(mv.beam ? [mv.beam.frame] : []), ...(mv.buff ? [mv.buff.frame] : [])];
     return Math.min(...fs);
   }
+  private beatMode() {
+    return settings.beat === "beat";
+  }
+  private beatMs() {
+    return 60000 / this.sfx.bpm;
+  }
+  /** First act frame (hit / spawn / beam / buff) strictly after `frame`, or null. */
+  private actAfter(mv: MoveDef, frame: number): number | null {
+    const fs = [...mv.hits.map((h) => h.frames[0]), ...(mv.spawns ?? []).map((x) => x.frame), ...(mv.beam ? [mv.beam.frame] : []), ...(mv.buff ? [mv.buff.frame] : [])].filter((f) => f > frame);
+    return fs.length ? Math.min(...fs) : null;
+  }
+  /**
+   * Choreographed timing: stretch each telegraph hold so the impact that follows it lands on the beat grid.
+   * Returns the hold length in ms for every hold of the move.
+   */
+  private planHolds(mv: MoveDef, now: number): number[] {
+    const holds = mv.holds ?? [];
+    const m = this.mul(), bm = this.beatMs(), grid = mv.grid ?? 1;
+    const fdur = 1000 / (mv.fps * m.fps);
+    const b0 = this.sfx.beatPos();
+    const plan: number[] = [];
+    let t = 0, frame = 0, prevImpact = 0; // t and prevImpact are ms offsets from `now`
+    holds.forEach((h, i) => {
+      t += (h.frame - frame) * fdur;
+      frame = h.frame;
+      const next = this.actAfter(mv, h.frame);
+      if (h.telegraph === false || next === null) {
+        plan.push(h.ms * m.hold);
+        t += h.ms * m.hold;
+        return;
+      }
+      const natural = t + (next - h.frame) * fdur;
+      const lead = i === 0 ? Math.max(1, (mv.leadBeats ?? 1.5) - (this.phase() === 2 ? 0.5 : 0)) : mv.gapBeats?.[i - 1] ?? 1;
+      const ref = i === 0 ? 0 : prevImpact;
+      let target = Math.ceil((b0 + ref / bm + lead) / grid - 1e-6) * grid; // beat position
+      let tTarget = (target - b0) * bm;
+      while (tTarget < natural + 90) tTarget += grid * bm; // never shorter than the animation allows
+      const holdMs = tTarget - natural;
+      plan.push(holdMs);
+      t += holdMs;
+      prevImpact = tTarget;
+    });
+    void now;
+    return plan;
+  }
+  private recoverMs(heavy: boolean) {
+    return this.beatMode() ? (heavy ? 1.25 : 0.75) * this.beatMs() : heavy ? 750 : 520;
+  }
   private deflectMs() {
     return DIFFICULTY[settings.difficulty].deflectMs;
   }
@@ -740,6 +789,9 @@ export class DuelScene extends Phaser.Scene {
       case "recover":
         faceP();
         f.play(this.def.anims.idle, undefined, { loop: true });
+        // choreographed mode: after a string the boss takes a small fencing step back, giving the exchange room to breathe
+        if (this.beatMode() && b.move && d < 80 && now - b.since < 0.6 * this.beatMs() && this.moveType(b.move) !== "beam")
+          f.move(this.world, Math.cos(toPlayer + Math.PI) * CAPTAIN_STEP(this.def.speed) * dt, Math.sin(toPlayer + Math.PI) * CAPTAIN_STEP(this.def.speed) * dt);
         if (b.auto) this.ensureRequest(now); // prefetch: the answer is usually ready by the time recovery ends
         if (now >= b.until) this.setB("idle");
         break;
@@ -805,6 +857,7 @@ export class DuelScene extends Phaser.Scene {
       vsMove: this.tel.summary(),
       lastOutcome: this.tel.lastOutcome,
       reachable,
+      timing: { mode: settings.beat, beatMs: Math.round(this.beatMs()) },
     };
   }
 
@@ -880,7 +933,7 @@ export class DuelScene extends Phaser.Scene {
         b.circleDir = Math.random() < 0.5 ? -1 : 1;
         return this.setB("move", 850);
       case "WAIT":
-        return this.setB("recover", 450 + Math.random() * 300);
+        return this.setB("recover", this.beatMode() ? this.beatMs() : 450 + Math.random() * 300);
       case "GUARD":
         return this.forceGuard();
       default:
@@ -913,6 +966,7 @@ export class DuelScene extends Phaser.Scene {
     b.buffed = false;
     b.gates = (mv.gates ?? []).map((def) => ({ def, requested: false, asking: false, ans: null, applied: false }));
     b.moveToken++;
+    b.plan = this.beatMode() ? this.planHolds(mv, now) : null;
     b.endSince = 0;
     b.held = false;
     b.holdIdx = 0;
@@ -1118,7 +1172,7 @@ export class DuelScene extends Phaser.Scene {
     if (choice === "CONTINUE") return "ok";
     if (choice === "DELAY") {
       b.held = true;
-      b.holdUntil = now + 360 * m.hold;
+      b.holdUntil = now + (this.beatMode() ? 0.5 * this.beatMs() : 360 * m.hold); // half a beat: lands off the beat
       return "ok";
     }
     if (choice === "FEINT") {
@@ -1131,7 +1185,7 @@ export class DuelScene extends Phaser.Scene {
       return "abort";
     }
     if (choice === "END") {
-      this.endMove(now, 380);
+      this.endMove(now, this.beatMode() ? 0.5 * this.beatMs() : 380);
       return "abort";
     }
     if (this.def.moves[choice]) {
@@ -1151,7 +1205,7 @@ export class DuelScene extends Phaser.Scene {
 
     if (!b.held && b.holdIdx < holds.length && fr >= holds[b.holdIdx].frame) {
       b.held = true;
-      b.holdUntil = now + holds[b.holdIdx].ms * m.hold;
+      b.holdUntil = now + (b.plan ? b.plan[b.holdIdx] : holds[b.holdIdx].ms * m.hold);
       b.holdIdx++;
     }
     if (b.held && now >= b.holdUntil) {
@@ -1216,7 +1270,7 @@ export class DuelScene extends Phaser.Scene {
         if (this.applyGate(g, now) === "abort") return;
       }
       const mt2 = this.moveType(mv);
-      this.endMove(now, mt2 === "heavy" || mt2 === "sweep" || mv.kind === "beam" || mv.kind === "buff" ? 750 : 520);
+      this.endMove(now, this.recoverMs(mt2 === "heavy" || mt2 === "sweep" || mv.kind === "beam" || mv.kind === "buff"));
     }
   }
 
@@ -1380,6 +1434,11 @@ export class DuelScene extends Phaser.Scene {
       const a = 0.35 + 0.15 * Math.sin(now / 120);
       g.fillStyle(0x8a4bff, a * 0.5).fillRect(gt.l, y - 14, gt.r - gt.l, 28);
       g.fillStyle(0xc9a0ff, a).fillRect(gt.l, y - 2, gt.r - gt.l, 4);
+    }
+    // choreographed mode: a faint pulse on the floor under the boss at every beat
+    if (this.beatMode() && this.bossActive()) {
+      const ph = ((this.sfx.beatPos() % 1) + 1) % 1;
+      g.lineStyle(2, 0xfff2c0, 0.22 * (1 - ph)).strokeEllipse(this.boss.x, this.boss.y, 26 + ph * 46, 10 + ph * 18);
     }
     // laser charge: aim line along the floor + a swelling orb
     const bb = this.b;

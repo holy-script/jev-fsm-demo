@@ -10,7 +10,7 @@
     "assets:download": "node tools/itch_download.mjs",
     "assets:duel": "python3 tools/prep_duel_assets.py && python3 tools/make_duel_map.py",
     "assets:download:duel": "node tools/itch_download.mjs duel",
-    "test:duel": "node tests/duel/mechanics.mjs && node tests/duel/jev-gates.mjs && node tests/duel/golem.mjs"
+    "test:duel": "node tests/duel/mechanics.mjs && node tests/duel/jev-gates.mjs && node tests/duel/golem.mjs && node tests/duel/beat.mjs"
   },
   "dependencies": {
     "next": "^15.0.0",

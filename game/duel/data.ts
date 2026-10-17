@@ -62,7 +62,10 @@ export interface MoveDef {
   anim: string; // sheet suffix, e.g. "atkA"
   fps: number;
   hits: HitDef[];
-  holds?: { frame: number; ms: number }[]; // freeze on a frame: the telegraph / delayed swing
+  holds?: { frame: number; ms: number; telegraph?: boolean }[]; // freeze on a frame: the telegraph / delayed swing. telegraph:false = a fixed pause (not beat-aligned)
+  leadBeats?: number; // choreographed mode: beats from the start of the move to its first impact
+  gapBeats?: number[]; // beats between impact i and impact i+1
+  grid?: number; // impacts snap to multiples of this many beats (1 = on the beat, 0.5 = syncopated)
   lunge?: { frames: [number, number]; speed: number }[];
   endFrame?: number; // stop early at this frame (reusing part of an animation)
 }
@@ -131,7 +134,7 @@ export interface BossDef {
 
 const GATE = {
   CONTINUE: { id: "CONTINUE", desc: "Follow through with the second slash at its normal timing." },
-  DELAY: { id: "DELAY", desc: "Hold the second slash a beat longer before it lands. Beats a player who taps guard early to deflect." },
+  DELAY: { id: "DELAY", desc: "Hold the second slash half a beat longer, so it lands OFF the beat. Beats a player who taps guard early or on the beat to deflect." },
   FEINT: { id: "FEINT", desc: "Cancel the second slash and raise your guard instead. Baits a roll or a greedy attack." },
   END: { id: "END", desc: "Stop here and recover. Safe, but gives the player a turn." },
 };
@@ -161,7 +164,7 @@ export const CAPTAIN: BossDef = {
         { frames: [2, 4], type: "normal", damage: 16, posture: 18, deflectPosture: 11, shape: cone(58, 62) },
         { frames: [8, 10], type: "normal", damage: 16, posture: 18, deflectPosture: 11, shape: cone(58, 62) },
       ],
-      holds: [{ frame: 1, ms: 330 }, { frame: 7, ms: 230 }], lunge: [{ frames: [1, 3], speed: 70 }, { frames: [7, 9], speed: 70 }],
+      holds: [{ frame: 1, ms: 330 }, { frame: 7, ms: 230 }], leadBeats: 1.5, gapBeats: [1], grid: 1, lunge: [{ frames: [1, 3], speed: 70 }, { frames: [7, 9], speed: 70 }],
       gates: [
         { after: 0, at: 7, default: "CONTINUE", options: [GATE.CONTINUE, GATE.DELAY, GATE.FEINT, GATE.END, { id: "GRAB", desc: "Drop the second slash and go straight into a grab. Ignores guard and roll; punishes a player who just rolled or stayed close." }] },
         { after: 1, at: "end", default: "END", options: [
@@ -178,7 +181,7 @@ export const CAPTAIN: BossDef = {
       desc: "A delayed heavy overhead: big damage if it lands and big posture damage if blocked. Slow wind-up, easy to deflect if the player is patient.",
       anim: "atkB", fps: 10,
       hits: [{ frames: [3, 5], type: "heavy", damage: 28, posture: 34, deflectPosture: 20, shape: cone(60, 48) }],
-      holds: [{ frame: 2, ms: 300 }], lunge: [{ frames: [2, 4], speed: 80 }],
+      holds: [{ frame: 2, ms: 300 }], leadBeats: 2, grid: 0.5, lunge: [{ frames: [2, 4], speed: 80 }],
       gates: [{ after: 0, at: "end", default: "END", options: [
         GATE.END,
         { id: "SWEEP", desc: "Chain a yellow sweep to punish a roll or a player who steps in." },
@@ -191,14 +194,14 @@ export const CAPTAIN: BossDef = {
       desc: "A red perilous thrust that lunges forward. Cannot be blocked or deflected. If the player rolls into it at the right time they slip you (+30 posture on you). Strong against standing, guarding players; risky against rollers.",
       anim: "atkA", fps: 14, endFrame: 5,
       hits: [{ frames: [3, 5], type: "thrust", damage: 32, posture: 30, deflectPosture: 0, shape: cone(96, 14) }],
-      holds: [{ frame: 1, ms: 480 }], lunge: [{ frames: [2, 5], speed: 170 }],
+      holds: [{ frame: 1, ms: 480 }], leadBeats: 2, grid: 1, lunge: [{ frames: [2, 5], speed: 170 }],
     },
     SWEEP: {
       id: "SWEEP", cooldown: 3500, label: "Sweep", reach: 78,
       desc: "A yellow sweep in a circle around you. Cannot be blocked; the player avoids it by rolling or backing away. Punishes players who stand still and guard up close.",
       anim: "atkB", fps: 10,
       hits: [{ frames: [3, 5], type: "sweep", damage: 26, posture: 30, deflectPosture: 0, shape: { kind: "circle", range: 66 } }],
-      holds: [{ frame: 2, ms: 420 }],
+      holds: [{ frame: 2, ms: 420 }], leadBeats: 2, grid: 1,
       gates: [{ after: 0, at: "end", default: "END", options: [
         GATE.END,
         { id: "OVERHEAD", desc: "Chain a heavy overhead right after the sweep." },
@@ -210,7 +213,7 @@ export const CAPTAIN: BossDef = {
       desc: "A purple grab. Cannot be blocked and ignores roll invulnerability; only distance avoids it. Punishes roll-reliant players who are close.",
       anim: "atkB", fps: 10,
       hits: [{ frames: [3, 4], type: "grab", damage: 38, posture: 20, deflectPosture: 0, shape: cone(44, 75) }],
-      holds: [{ frame: 1, ms: 560 }], lunge: [{ frames: [2, 4], speed: 120 }],
+      holds: [{ frame: 1, ms: 560 }], leadBeats: 2.5, grid: 0.5, lunge: [{ frames: [2, 4], speed: 120 }],
     },
   },
   weights: {
@@ -252,7 +255,7 @@ export const GOLEM: BossDef = {
       desc: "A slow crushing overhand swing with a very long wind-up. Big damage if it lands and big posture damage if blocked, but easy to deflect or dodge for a patient player. Strong against players who stay close.",
       anim: "melee", fps: 12,
       hits: [{ frames: [4, 5], type: "heavy", damage: 30, posture: 36, deflectPosture: 22, shape: cone(70, 58) }],
-      holds: [{ frame: 2, ms: 440 }], lunge: [{ frames: [3, 5], speed: 50 }],
+      holds: [{ frame: 2, ms: 440 }], leadBeats: 2, grid: 1, lunge: [{ frames: [3, 5], speed: 50 }],
       gates: [{ after: 0, at: "end", default: "END", options: [
         { id: "END", desc: "Stop and recover. Safe, but gives the player a turn." },
         { id: "ARM_SHOT", desc: "Fire the arm point-blank right after the swing; punishes a player who stepped in to punish." },
@@ -264,7 +267,7 @@ export const GOLEM: BossDef = {
       id: "ARM_SHOT", cooldown: 2800, label: "Arm shot", reach: 340, kind: "projectile",
       desc: "Launch a stone fist in a straight line. The player can block it, roll through it, or deflect it back at you for big posture damage on you if their tap is well timed. Good at mid-to-long range to force a reaction. In phase 2 it fires two in a row.",
       anim: "arm", fps: 12, hits: [],
-      holds: [{ frame: 2, ms: 380 }],
+      holds: [{ frame: 2, ms: 380 }], leadBeats: 2, grid: 1,
       spawns: [{ frame: 3, speed: 240, damage: 18, posture: 22, deflectPosture: 16 }],
       spawnsP2: [{ frame: 3, speed: 240, damage: 18, posture: 22, deflectPosture: 16 }, { frame: 6, speed: 280, damage: 18, posture: 22, deflectPosture: 16 }],
     },
@@ -272,7 +275,7 @@ export const GOLEM: BossDef = {
       id: "LASER", cooldown: 7000, label: "Laser", reach: 300, kind: "beam",
       desc: "Charge for about a second, then fire a straight beam. Cannot be blocked or deflected. The aim tracks the player during the charge and locks about 0.3s before firing: the player must step or roll off the line in that window, or roll through it. Punishes players who stand still, turtle at range, or strafe in a straight line.",
       anim: "laser", fps: 10, hits: [],
-      holds: [{ frame: 4, ms: 780 }, { frame: 6, ms: 480 }],
+      holds: [{ frame: 4, ms: 780 }, { frame: 6, ms: 480, telegraph: false }], leadBeats: 3, grid: 1,
       beam: { frame: 5, ms: 460, length: 300, halfWidth: 13, damage: 34, posture: 28, lockMs: 300 },
     },
     ARMOR_UP: {

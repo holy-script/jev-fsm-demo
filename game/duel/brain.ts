@@ -101,6 +101,7 @@ export interface DuelSnapshot {
   vsMove: Record<string, unknown>;
   lastOutcome: { move: string; outcome: string } | null;
   reachable: Record<string, boolean>;
+  timing: { mode: "beat" | "classic"; beatMs: number };
   gate?: { move: string; step: number };
 }
 
@@ -131,6 +132,7 @@ Rules you must reason with:
 - A thrown projectile can be blocked, rolled through, or deflected back at you if the player's guard tap is well timed (then YOUR posture rises).
 - The player's kick breaks a raised guard unless the move description says otherwise.
 - A player who always answers the same way (always rolls, always deflects, always attacks first) can be punished by the move that beats that answer.
+- When snapshot.timing.mode is "beat", the fight is choreographed to a musical beat (timing.beatMs per beat): your attacks land ON the beat, and a DELAY lands half a beat OFF it. A player who taps guard on the beat deflects on-beat attacks easily but is beaten by off-beat ones.
 Play to win but stay unpredictable: do not repeat the same action over and over, and adapt to the habits shown in the data.`;
 
 const mechanics = (def: BossDef) => `You control ${def.name}, ${def.title}, a boss in a Sekiro-style duel against a human swordsman. ${def.persona}\n${RULES_TEXT}`;

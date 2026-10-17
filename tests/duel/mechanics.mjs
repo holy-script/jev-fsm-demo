@@ -4,6 +4,7 @@ const b = await chromium.launch({ args: ["--use-gl=swiftshader", "--enable-unsaf
 const p = await b.newPage({ viewport: { width: 1300, height: 700 } });
 const errs = [];
 p.on("pageerror", e => errs.push("PAGEERR: " + (e.stack || e.message).split("\n").slice(0, 3).join(" | ")));
+await p.addInitScript(() => localStorage.setItem("duel.settings", JSON.stringify({ beat: "classic", difficulty: "duelist", music: true, sfx: 0.8 }))); // legacy timing keeps these checks deterministic
 await p.goto("http://localhost:3000/duel?dev=1", { waitUntil: "load" });
 await p.waitForFunction(() => window.__duel?.player, null, { timeout: 30000 });
 await p.waitForTimeout(800);

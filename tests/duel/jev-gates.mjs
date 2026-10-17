@@ -22,6 +22,7 @@ await p.route("**/api/jev/ask", async (route) => {
   }
   await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ answers }) });
 });
+await p.addInitScript(() => localStorage.setItem("duel.settings", JSON.stringify({ beat: "classic", difficulty: "duelist", music: true, sfx: 0.8 }))); // legacy timing keeps these checks deterministic
 await p.goto("http://localhost:3000/duel?dev=1", { waitUntil: "load" });
 await p.waitForFunction(() => window.__duel?.player, null, { timeout: 30000 }); await p.waitForTimeout(800);
 const results = []; const check = (n, c, i) => { results.push(c); console.log((c ? "PASS " : "FAIL ") + n + "  " + JSON.stringify(i)); };

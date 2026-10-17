@@ -36,3 +36,10 @@ If Jev errors, is slow (>1.5s) or answers with an unavailable action, the boss f
 - **Mecha-Stone Golem** - slow, huge, cannot be flinched. Crushing stone fist, a thrown fist you can deflect back at it, a laser whose aim locks 0.3s before firing, a stone guard that only a heavy attack breaks, and an armor buff (half damage for 7s). Phase 2 throws two fists.
 
 `node tests/duel/golem.mjs` checks the Golem's mechanics; `node tests/duel/personas.mjs 40000 1` runs the play-style bots against it (the last argument picks the boss: 0 Captain, 1 Golem).
+
+### Choreography, sound and effects
+
+- **Combat timing** (Settings): *Choreographed* snaps every boss impact to the beat of the fight's music (measured with `tools/bpm.py`: Captain 90 BPM, Golem 80, final boss 70). Some moves land half a beat *off* the beat on purpose (the Captain's overhead, grab, and the delay branch), and recoveries and the post-string recoil step are measured in beats. *Classic* keeps the original timing. `node tests/duel/beat.mjs` checks impacts land within ~0.04 beat of the grid.
+- **Difficulty** (Settings): Assist / Duelist / Shadow change the deflect window (220 / 160 / 130 ms) and damage dealt and taken.
+- **Sound**: recorded CC0 sword clashes and swings plus a synthesised library on one compressed bus, with a distinct warning cue for each unblockable move (thrust, sweep, grab, laser). `node tests/duel/audio.mjs` renders every cue offline and prints peak and loudness so levels can be balanced without listening.
+- **Effects**: where an animation is missing, tinted bursts, afterimages and squash stand in: red body flash and blood for hurt, green pulse and sparkle for heal, a starburst for deflect, shards for stone.
