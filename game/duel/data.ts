@@ -1,8 +1,8 @@
 // Tunable numbers and move definitions for the posture duel. Distances are world pixels (ground plane), times in ms.
 
 export const ZOOM = 2;
-export const VIEW_W = 960;
-export const VIEW_H = 540;
+export const VIEW_W = 1280;
+export const VIEW_H = 720;
 export const TILE = 16;
 
 export type AtkType = "normal" | "heavy" | "thrust" | "sweep" | "grab" | "beam";

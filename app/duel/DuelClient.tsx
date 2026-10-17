@@ -31,6 +31,7 @@ export default function DuelClient() {
   const [decisions, setDecisions] = useState<Entry[]>([]);
   const [reads, setReads] = useState<Reads | null>(null);
   const [missing, setMissing] = useState(false);
+  const [panel, setPanel] = useState(false);
 
   useEffect(() => {
     let destroy: (() => void) | undefined;
@@ -47,85 +48,71 @@ export default function DuelClient() {
         },
       });
     });
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Tab") {
+        e.preventDefault();
+        setPanel((v) => !v);
+      }
+    };
+    window.addEventListener("keydown", onKey);
     return () => {
       cancelled = true;
+      window.removeEventListener("keydown", onKey);
       destroy?.();
     };
   }, []);
 
   const last = decisions.find((d) => d.probabilities);
   const probs = last?.probabilities ? Object.entries(last.probabilities).sort((a, b) => b[1] - a[1]).slice(0, 6) : [];
-  const key = (k: string, d: string) => (
-    <div style={{ display: "flex", gap: 8, padding: "1px 0" }}>
-      <b style={{ width: 64, color: "#e3b341", flexShrink: 0 }}>{k}</b>
-      <span style={{ opacity: 0.85 }}>{d}</span>
-    </div>
-  );
 
   return (
-    <div style={{ display: "flex", gap: 16, padding: 16, flexWrap: "wrap", alignItems: "flex-start" }}>
-      <div style={{ flex: "1 1 640px", maxWidth: 1000 }}>
-        <div style={{ marginBottom: 8, fontSize: 13 }}>
-          <Link href="/" style={{ color: "#58a6ff" }}>← back</Link>
-        </div>
-        {missing && (
-          <div style={{ border: "1px solid #d29922", padding: 12, marginBottom: 8, fontSize: 13 }}>
-            Duel assets not found. See <code>tools/README.md</code>, then run <code>npm run assets:duel</code> and reload.
-          </div>
-        )}
-        <div ref={parent} style={{ width: "100%", aspectRatio: "16 / 9", background: "#0b0d12", border: "1px solid #30363d" }} />
-        <p style={{ opacity: 0.7, fontSize: 13 }}>
-          Walk north through the gate to wake the first boss. Deflect (tap guard just before impact) to break its posture, then land the deathblow. Beat the Skeleton Captain to face the Mecha-Stone Golem.{" "}
-          <b>F</b> swaps the boss&apos;s brain between Jev and a fixed-priority rules bot.
-        </p>
+    <div style={{ position: "fixed", inset: 0, background: "#05070a" }}>
+      <div ref={parent} style={{ position: "absolute", inset: 0 }} />
+      <div style={{ position: "absolute", top: 10, left: 12, fontSize: 12, display: "flex", gap: 12, alignItems: "center", opacity: 0.8 }}>
+        <Link href="/" style={{ color: "#58a6ff" }}>← back</Link>
+        <button onClick={() => setPanel((v) => !v)} style={{ background: "#161b22", color: "#e6edf3", border: "1px solid #30363d", padding: "3px 10px", cursor: "pointer", fontFamily: "inherit", fontSize: 12 }}>
+          Jev panel [Tab]
+        </button>
       </div>
-
-      <div style={{ width: 360, fontSize: 12 }}>
-        <h2 style={{ margin: "0 0 8px" }}>Posture Duel</h2>
-
-        <h3 style={{ margin: "8px 0 4px" }}>Jev&apos;s read of you</h3>
-        {!reads && <div style={{ opacity: 0.5 }}>wake the boss and fight…</div>}
-        {reads && (
-          <>
-            {READS.map(([k, label]) => (
-              <Bar key={k} label={label} value={reads[k]} color={reads[k] > 0.66 ? "#f0883e" : "#58a6ff"} />
+      {missing && (
+        <div style={{ position: "absolute", top: 50, left: 12, border: "1px solid #d29922", background: "#161b22", padding: 12, fontSize: 13 }}>
+          Duel assets not found. See <code>tools/README.md</code>, then run <code>npm run assets:duel</code> and reload.
+        </div>
+      )}
+      {panel && (
+        <div style={{ position: "absolute", top: 44, right: 12, bottom: 12, width: 340, overflowY: "auto", background: "rgba(13,17,23,0.88)", border: "1px solid #30363d", padding: 12, fontSize: 12 }}>
+          <h3 style={{ margin: "0 0 4px" }}>Jev&apos;s read of you</h3>
+          {!reads && <div style={{ opacity: 0.5 }}>wake the boss and fight…</div>}
+          {reads && (
+            <>
+              {READS.map(([k, label]) => (
+                <Bar key={k} label={label} value={reads[k]} color={reads[k] > 0.66 ? "#f0883e" : "#58a6ff"} />
+              ))}
+              <Bar label="predictable" value={reads.predictability / 3} color="#bc8cff" right={reads.predictability.toFixed(1)} />
+            </>
+          )}
+          <h3 style={{ margin: "12px 0 4px" }}>Last decision{last ? `: ${last.label}` : ""}</h3>
+          {probs.map(([name, p]) => (
+            <Bar key={name} label={name} value={p} color={name === last?.choice ? "#58a6ff" : "#6e7681"} />
+          ))}
+          <h3 style={{ margin: "12px 0 4px" }}>Decision log</h3>
+          <div style={{ maxHeight: 220, overflowY: "auto" }}>
+            {decisions.map((d) => (
+              <div key={d.id} style={{ padding: "2px 0", borderBottom: "1px solid #21262d" }}>
+                <b>{d.label}</b> <span style={{ opacity: 0.6 }}>[{d.source}{d.latencyMs ? ` ${d.latencyMs}ms` : ""}]</span>
+                {d.error && <div style={{ color: "#f85149" }}>{d.error}</div>}
+              </div>
             ))}
-            <Bar label="predictable" value={reads.predictability / 3} color="#bc8cff" right={reads.predictability.toFixed(1)} />
-          </>
-        )}
-
-        <h3 style={{ margin: "12px 0 4px" }}>Last decision{last ? `: ${last.label}` : ""}</h3>
-        {probs.map(([name, p]) => (
-          <Bar key={name} label={name} value={p} color={name === last?.choice ? "#58a6ff" : "#6e7681"} />
-        ))}
-
-        <h3 style={{ margin: "12px 0 4px" }}>Decision log</h3>
-        <div style={{ maxHeight: 190, overflowY: "auto" }}>
-          {decisions.map((d) => (
-            <div key={d.id} style={{ padding: "2px 0", borderBottom: "1px solid #21262d" }}>
-              <b>{d.label}</b>{" "}
-              <span style={{ opacity: 0.6 }}>[{d.source}{d.latencyMs ? ` ${d.latencyMs}ms` : ""}]</span>
-              {d.error && <div style={{ color: "#f85149" }}>{d.error}</div>}
-            </div>
-          ))}
+          </div>
+          <h3 style={{ margin: "12px 0 4px" }}>Events</h3>
+          <div style={{ maxHeight: 130, overflowY: "auto", opacity: 0.8 }}>
+            {log.map((l, i) => (
+              <div key={i} style={{ padding: "1px 0" }}>{l}</div>
+            ))}
+          </div>
+          <div style={{ opacity: 0.55, marginTop: 10 }}>dev keys: Z X C V B force the boss&apos;s moves · G guard · N auto · T refill · Y wake · 1/2 pick boss · F brain</div>
         </div>
-
-        <h3 style={{ margin: "12px 0 4px" }}>Controls</h3>
-        {key("WASD", "move (auto-faces boss)")}
-        {key("J / click", "light chain · K heavy")}
-        {key("SPACE", "tap = deflect · hold = block")}
-        {key("SHIFT", "roll · dodge a red thrust = SLIP")}
-        {key("E / Q", "kick (breaks guard) / heal")}
-        {key("F / R / M", "brain / retry / music")}
-        <div style={{ opacity: 0.55, marginTop: 4 }}>dev: Z X C V B force the boss's moves in order · G guard · N auto · T refill · Y wake · 1/2 pick boss</div>
-
-        <h3 style={{ margin: "12px 0 4px" }}>Events</h3>
-        <div style={{ maxHeight: 120, overflowY: "auto", opacity: 0.8 }}>
-          {log.map((l, i) => (
-            <div key={i} style={{ padding: "1px 0" }}>{l}</div>
-          ))}
-        </div>
-      </div>
+      )}
     </div>
   );
 }
