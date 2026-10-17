@@ -1,9 +1,11 @@
 # Jev vs Human
 
+> Engineering docs for contributors and coding agents: [docs/README.md](docs/README.md).
+
 Jev (TypeSafe's decision model) picks the next state of an enemy finite state machine; you try to beat it. Next.js + Phaser.
 
 - `/boss-rush` - side-view hack & slash, four bosses (Slime, Fire Worm, Evil Wizard, Bringer of Death), Tiled arenas. Needs assets: see [tools/README.md](tools/README.md).
-- `/duel` - Sekiro-style posture duel on a large top-down map (deflect, posture bars, deathblows, perilous attacks). Two bosses (Skeleton Captain, Mecha-Stone Golem), both driven by Jev. Assets: see [tools/README.md](tools/README.md).
+- `/duel` - Sekiro-style posture duel on a large top-down map (deflect, posture bars, deathblows, perilous attacks). A full game: tutorial, skill shrine, three areas and a final boss (Bone Soldier, Spear Bearer, Skeleton Captain, Mecha-Stone Golem, Bringer of Death), with Jev choosing the boss's moves, combo branches, rhythm and taunts. Assets: see [tools/README.md](tools/README.md).
 - `/basic` - v1, a top-down shooter duel with procedural art. Also kept on the `v1-basic` branch.
 
 ```bash
