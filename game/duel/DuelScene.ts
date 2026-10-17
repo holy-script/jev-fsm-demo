@@ -117,7 +117,7 @@ export class DuelScene extends Phaser.Scene {
     hp: 0, seg: 0, posture: 0, mode: "idle" as BMode, since: 0, until: 0, move: null as MoveDef | null, hit: [] as boolean[], dodged: [] as boolean[],
     held: false, holdIdx: 0, holdUntil: 0, atkDir: 0, awake: false, auto: true, nextThink: 0, lastPostureHit: 0, slipped: false,
     cd: {} as Record<string, number>, poiseUntil: 0, armorUntil: 0, spawned: [] as boolean[], buffed: false, last: "", sounded: false, glyph: null as { type: keyof typeof GLYPH; until: number } | null, moveDir: 0,
-    decision: null as (Decision & { at: number }) | null, asking: false, askId: 0, askedAt: 0, nextAsk: 0,
+    intent: null as { id: string; until: number } | null, decision: null as (Decision & { at: number }) | null, asking: false, askId: 0, askedAt: 0, nextAsk: 0,
     moveKind: "approach" as "approach" | "backstep" | "circle", circleDir: 1 as 1 | -1, history: [] as string[],
     gates: [] as GateRt[], plan: null as number[] | null, holdTotal: 0, moveToken: 0, endSince: 0, res: [] as (Outcome | null)[],
   };
@@ -233,7 +233,7 @@ export class DuelScene extends Phaser.Scene {
     this.boss.y = home.y;
     this.boss.face = -1;
     Object.assign(this.b, { hp: this.def.segmentHp, seg: 0, posture: 0, mode: "idle", since: this.time.now, until: 0, move: null, awake: false, held: false, holdIdx: 0, cd: {}, glyph: null, last: "", nextThink: 0,
-      auto: this.hud.auto, decision: null, asking: false, askId: this.b.askId + 1, nextAsk: 0, history: [], gates: [], moveToken: this.b.moveToken + 1, endSince: 0, res: [], armorUntil: 0, poiseUntil: 0, spawned: [], buffed: false });
+      auto: this.hud.auto, intent: null, decision: null, asking: false, askId: this.b.askId + 1, nextAsk: 0, history: [], gates: [], moveToken: this.b.moveToken + 1, endSince: 0, res: [], armorUntil: 0, poiseUntil: 0, spawned: [], buffed: false });
     this.hud.bossName = this.def.name;
     this.hud.bossSegs = this.def.segments;
     this.tel.reset();
@@ -335,7 +335,9 @@ export class DuelScene extends Phaser.Scene {
     save.seen.push(key);
     saveGame();
     this.setB("recover", 1e9);
-    this.say(this.def.speaker ?? this.def.name, lines, true).then(after, after);
+    this.storyHold = true;
+    const done = () => { this.storyHold = false; after(); };
+    this.say(this.def.speaker ?? this.def.name, lines, true).then(done, done);
   }
 
   // ------------------------------------------------------------ helpers
@@ -383,7 +385,7 @@ export class DuelScene extends Phaser.Scene {
     this.hud.heals = this.p.heals;
     this.hud.bossHp = ((this.def.segments - 1 - this.b.seg) * this.def.segmentHp + Math.max(0, this.b.hp)) / (this.def.segments * this.def.segmentHp);
     this.hud.bossSeg = this.b.seg;
-    this.hud.bossPosture = this.b.posture / this.def.maxPosture;
+    this.hud.bossPosture = this.b.mode === "broken" ? 1 : Math.min(1, this.b.posture / 100);
     this.hud.bossGuard = this.b.mode === "guard";
     this.hud.bossArmor = this.time.now < this.b.armorUntil;
     this.hud.spirit = this.p.spirit;
@@ -1224,6 +1226,7 @@ export class DuelScene extends Phaser.Scene {
     this.tutEvent("break");
     this.boss.freeze(false);
     b.held = false;
+    b.posture = 100; // the bar reads full for the whole stagger, whether posture or HP broke it
     this.setB("broken", ms);
     this.boss.play(this.def.anims.hit, 6, { restart: true });
     this.popup(this.boss.x, this.boss.y - this.def.headY - 14, "POSTURE BROKEN", "#ffd36b");
@@ -1242,7 +1245,8 @@ export class DuelScene extends Phaser.Scene {
     const b = this.b;
     if (b.seg >= this.def.segments - 1) return this.killBoss();
     b.hp = 0;
-    this.breakBoss(now, 7000); // health gone: only a deathblow can finish this segment
+    this.breakBoss(now, 5000); // health gone: only a deathblow can finish this segment
+    this.time.delayedCall(260, () => this.popup(this.boss.x, this.boss.y - this.def.headY - 28, "STRIKE: DEATHBLOW", "#ff7b7b"));
     b.posture = 100;
     this.hooks.onLog("segment emptied - land the deathblow");
   }
@@ -1386,6 +1390,7 @@ export class DuelScene extends Phaser.Scene {
    * Choreographed timing: stretch each telegraph hold so the impact that follows it lands on the beat grid.
    * Returns the hold length in ms for every hold of the move.
    */
+  private storyHold = false; // an intro is being spoken: the boss waits
   private rhythmNow: string | null = null; // chosen by Jev with the move; consumed by forceMove
   private planHolds(mv: MoveDef, now: number, rhythm: string | null = null): number[] {
     const holds = mv.holds ?? [];
@@ -1448,11 +1453,30 @@ export class DuelScene extends Phaser.Scene {
     return this.phase() === 2 ? { fps: 1.12, hold: 0.8, cd: 0.8, speed: 1.15 } : { fps: 1, hold: 1, cd: 1, speed: 1 };
   }
 
+  /** Safety net: no boss state may last forever. A state held far past its natural length is cut short and the boss carries on. */
+  private watchdog(now: number) {
+    const b = this.b;
+    if (!b.auto || this.def.training || this.dlg || this.storyHold || this.travelling || this.p.mode === "dead" || !b.awake) return;
+    const limit = b.mode === "attack" ? 9000 : b.mode === "broken" ? 8000 : b.mode === "idle" ? 4500 : 6000;
+    if (now - b.since <= limit) return;
+    this.hooks.onLog(`watchdog: ${b.mode}${b.move ? " " + b.move.id : ""} held for ${Math.round((now - b.since) / 1000)}s - unstuck`);
+    this.boss.freeze(false);
+    b.held = false;
+    b.glyph = null;
+    b.moveToken++;
+    b.asking = false;
+    b.askId++;
+    b.decision = null;
+    this.setB("recover", 300);
+  }
+
   private updateBoss(now: number, dt: number) {
     const b = this.b, f = this.boss;
     f.sprite.anims.timeScale = b.held ? 0 : 1;
     if (!b.awake) return void f.play(this.def.anims.idle, undefined, { loop: true });
     if (b.mode === "dead") return;
+    this.checkBossBreak(now); // posture that reached full by any route (a reflected bolt, a slip) always breaks
+    this.watchdog(now);
 
     if (b.mode !== "broken" && now - b.lastPostureHit > 1800) {
       const frac = (this.def.segments - 1 - b.seg) * 0.4 + Math.max(0.2, b.hp / this.def.segmentHp);
@@ -1670,12 +1694,30 @@ export class DuelScene extends Phaser.Scene {
 
   private takeDecision(now: number) {
     const b = this.b;
+    if (b.intent) {
+      const it = b.intent;
+      if (it.until <= now) b.intent = null;
+      else if (this.availableActions(now).includes(it.id)) {
+        b.intent = null;
+        b.decision = null;
+        b.askId++;
+        b.asking = false;
+        return this.execAction(it.id, now);
+      }
+    }
     if (b.decision) {
       const d = b.decision;
       b.decision = null;
       b.nextAsk = now + 100;
       if (now - d.at > 3500) return; // stale: ask again
       const avail = this.availableActions(now);
+      // Jev wanted a melee move but the player slipped out of its reach while the answer was in flight: close in, then strike
+      const mvChosen = this.def.moves[d.choice];
+      if (!avail.includes(d.choice) && mvChosen && !mvChosen.kind && now >= (b.cd[d.choice] ?? 0) && avail.includes("APPROACH")) {
+        b.intent = { id: d.choice, until: now + 3500 };
+        this.hooks.onLog(`${d.choice}: out of reach, closing in first`);
+        return this.execAction("APPROACH", now);
+      }
       if (!avail.includes(d.choice)) {
         const r = rulesIdle(this.def, this.snapshot(now), avail, "fallback", `${d.choice} no longer available`);
         this.setDecision(r, now);

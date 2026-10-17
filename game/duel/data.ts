@@ -178,7 +178,7 @@ export const CAPTAIN: BossDef = {
   headY: 78,
   segments: 2,
   segmentHp: 190,
-  maxPosture: 125,
+  maxPosture: 100,
   speed: 62,
   radius: 9,
   anims: { idle: "idle", walk: "walk", hit: "hit", block: "block", dead: "dead" },
