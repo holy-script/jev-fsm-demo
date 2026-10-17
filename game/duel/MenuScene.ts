@@ -103,18 +103,19 @@ export class MenuScene extends Phaser.Scene {
       this.sub.setText(title ? "a duel that learns" : "");
       this.items = title
         ? [
-            { label: () => "Continue", enabled: () => save.cleared.length > 0, act: () => this.startGame(), hint: () => `${save.cleared.length} guardian(s) defeated` },
+            { label: () => "Continue", enabled: () => save.cleared.length > 0 || save.tutorialDone, act: () => this.startGame(), hint: () => save.cleared.length ? `${save.cleared.length} guardian(s) defeated` : "The tutorial is done: onward to the Hall." },
             { label: () => "New Game", act: () => { resetSave(); this.startGame(); } },
             { label: () => "Settings", act: () => { this.screen = "settings"; this.idx = 0; this.build(); } },
             { label: () => "Credits", act: () => { this.screen = "credits"; this.idx = 0; this.build(); } },
           ]
         : [
             { label: () => "Resume", act: () => this.resume() },
+            { label: () => "Skip tutorial", enabled: () => !!(this.scene.get("duel") as unknown as { isTutorial?: () => boolean }).isTutorial?.(), act: () => { (this.scene.get("duel") as unknown as { skipTutorial: () => void }).skipTutorial(); this.resume(); } },
             { label: () => "Skills (shrine)", act: () => { this.scene.setVisible(false); this.scene.launch("skills", { from: "menu" }); this.scene.pause(); } },
             { label: () => "Settings", act: () => { this.screen = "settings"; this.idx = 0; this.build(); } },
             { label: () => "Quit to title", act: () => this.quitToTitle() },
           ];
-      if (title && !save.cleared.length) this.idx = 1;
+      if (title && !(save.cleared.length || save.tutorialDone)) this.idx = 1;
     } else if (this.screen === "settings") {
       this.heading.setText("SETTINGS").setFontSize(52);
       this.sub.setText("");

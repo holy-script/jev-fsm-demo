@@ -131,6 +131,10 @@ export interface BossDef {
   guardLoop?: boolean; // false: the guard animation plays once and holds its last frame
   stoneGuard?: boolean; // guard is immune to light attacks and kicks; only a heavy breaks it
   noFlinch?: boolean; // hits never interrupt it (it only flashes)
+  kind?: "training" | "grunt" | "boss"; // default boss: only bosses award skill points and open the shrine
+  tint?: number; // constant body tint (the Shade)
+  training?: boolean; // cannot die, scripted by the tutorial, shows timing rings
+  brain?: "jev" | "rules"; // default jev
   music: string; // key in manifest.music
   persona: string; // told to Jev
   actionDesc?: Record<string, string>; // overrides for the generic actions (e.g. GUARD)
@@ -297,7 +301,27 @@ export const GOLEM: BossDef = {
   },
 };
 
+/** The tests and dev mode use BOSSES directly; the real game plays ENCOUNTERS (tutorial first). */
 export const BOSSES: BossDef[] = [CAPTAIN, GOLEM];
+
+/** The Sparring Shade: the Captain's moves, telegraphed 1.9x slower and hitting lightly, driven by the tutorial script. It cannot die. */
+export const SHADE: BossDef = (() => {
+  const moves: Record<string, MoveDef> = {};
+  for (const [id, m] of Object.entries(CAPTAIN.moves)) {
+    moves[id] = {
+      ...m,
+      gates: undefined, cooldown: 0, leadBeats: undefined,
+      holds: m.holds?.map((h) => ({ ...h, ms: Math.round(h.ms * 1.9) })),
+      hits: m.hits.map((h) => ({ ...h, damage: Math.max(4, Math.round(h.damage * 0.35)) })),
+    };
+  }
+  return {
+    ...CAPTAIN, id: "shade", name: "SPARRING SHADE", title: "what remains of a pupil", kind: "training", training: true, tint: 0x9bb8ff,
+    segments: 1, segmentHp: 120, moves, music: "temple", brain: "rules", persona: "A training dummy.",
+  };
+})();
+
+export const ENCOUNTERS: BossDef[] = [SHADE, CAPTAIN, GOLEM];
 
 export const GLYPH: Record<AtkType, { color: number; label: string } | null> = {
   beam: { color: 0xff8a2b, label: "!" },

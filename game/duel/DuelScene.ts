@@ -1,9 +1,10 @@
 import * as Phaser from "phaser";
 import { Fighter, World, angleTo, dist, inShape, type DuelManifest } from "./engine";
-import { BOSSES, GAME, GLYPH, HERO, HERO_MOVES, LIGHT_CHAIN, SPIRIT, TILE, ZOOM, type AtkType, type BossDef, type GateDef, type HitDef, type MoveDef, type SpawnDef } from "./data";
+import { BOSSES, ENCOUNTERS, GAME, GLYPH, HERO, HERO_MOVES, LIGHT_CHAIN, SPIRIT, TILE, ZOOM, type AtkType, type BossDef, type GateDef, type HitDef, type MoveDef, type SpawnDef } from "./data";
 import { DIFFICULTY, save, saveGame, settings } from "./settings";
 import { Vfx } from "./vfx";
 import { awardPoint, has } from "./skills";
+import { runTutorial, type TutorialHost } from "./tutorial";
 import { Telemetry, askGate, askIdle, rulesGate, rulesIdle, type Decision, type DuelSnapshot, type Outcome } from "./brain";
 import { Sfx } from "./sfx";
 
@@ -19,6 +20,8 @@ export interface HudState {
   message: string; sub: string; auto: boolean; music: boolean;
   brain: "JEV" | "RULES"; thinking: boolean; last: string; bossArmor: boolean;
   spirit: number; maxSpirit: number; riposte: boolean; art: boolean; tool: boolean;
+  dialog: { who: string; text: string; done: boolean; i: number; n: number } | null;
+  objective: { title: string; text: string; progress?: string; hint?: string } | null;
 }
 interface Proj { x: number; y: number; vx: number; vy: number; spr: Phaser.GameObjects.Sprite; dmg: number; post: number; defl: number; moveId: string; reflected: boolean; consumed: boolean; dodged: boolean; born: number }
 interface Beam { x: number; y: number; ang: number; until: number; len: number; half: number; spr: Phaser.GameObjects.Sprite; dmg: number; post: number; moveId: string; hit: boolean; dodged: boolean }
@@ -46,8 +49,26 @@ export class DuelScene extends Phaser.Scene {
   private hooks!: DuelHooks;
   private man!: DuelManifest;
   private world!: World;
-  private def: BossDef = BOSSES[0];
+  private def: BossDef = ENCOUNTERS[0];
   private bossIdx = 0;
+  // tutorial / dialogue state
+  private dlg: { lines: { who: string; text: string }[]; i: number; shown: number; resolve: () => void } | null = null;
+  private waiters: { cond: () => boolean; resolve: (v: boolean) => void; start: number; opts: { progress?: () => string; hints?: { afterMs: number; text: string }[]; timeoutMs?: number } }[] = [];
+  private cnt: Record<string, number> = {};
+  private shadeLoop: { moves: string[]; gap: number; i: number; next: number } | null = null;
+  private shadeGuardEvery = 0;
+  private shadeGuardNext = 0;
+  private shadeSpeed = 1;
+  private ringAidOn = false;
+  private npc?: Fighter;
+  private npcLabel?: Phaser.GameObjects.Text;
+  private tutorialOn = false;
+  private tutCancelled = false;
+  private movedTotal = 0;
+  private movedBase = 0;
+  private lastPx = 0;
+  private lastPy = 0;
+  private shrineResolve: (() => void) | null = null;
   private projs: Proj[] = [];
   private blades: { x: number; y: number; vx: number; vy: number; born: number }[] = [];
   private beams: Beam[] = [];
@@ -80,7 +101,7 @@ export class DuelScene extends Phaser.Scene {
     cd: {} as Record<string, number>, poiseUntil: 0, armorUntil: 0, spawned: [] as boolean[], buffed: false, last: "", sounded: false, glyph: null as { type: keyof typeof GLYPH; until: number } | null, moveDir: 0,
     decision: null as (Decision & { at: number }) | null, asking: false, askId: 0, askedAt: 0, nextAsk: 0,
     moveKind: "approach" as "approach" | "backstep" | "circle", circleDir: 1 as 1 | -1, history: [] as string[],
-    gates: [] as GateRt[], plan: null as number[] | null, moveToken: 0, endSince: 0, res: [] as (Outcome | null)[],
+    gates: [] as GateRt[], plan: null as number[] | null, holdTotal: 0, moveToken: 0, endSince: 0, res: [] as (Outcome | null)[],
   };
   private tel = new Telemetry();
   private moving = false;
@@ -113,7 +134,7 @@ export class DuelScene extends Phaser.Scene {
     this.fx = this.add.graphics().setDepth(40);
     this.glyphText = this.add.text(0, 0, "!", { fontFamily: "monospace", fontSize: "14px", color: "#fff", fontStyle: "bold" }).setOrigin(0.5).setDepth(45).setResolution(2).setVisible(false);
 
-    this.keys = this.input.keyboard!.addKeys("W,A,S,D,UP,DOWN,LEFT,RIGHT,SPACE,SHIFT,J,K,E,Q,R,M,Z,X,C,V,B,G,N,T,Y,F,ONE,TWO,ESC,L,I") as Record<string, Phaser.Input.Keyboard.Key>;
+    this.keys = this.input.keyboard!.addKeys("W,A,S,D,UP,DOWN,LEFT,RIGHT,SPACE,SHIFT,J,K,E,Q,R,M,Z,X,C,V,B,G,N,T,Y,F,ONE,TWO,ESC,L,I,ENTER") as Record<string, Phaser.Input.Keyboard.Key>;
     this.input.mouse?.disableContextMenu();
     const buf = (field: "atkBuf" | "heavyBuf" | "rollBuf" | "kickBuf" | "healBuf" | "artBuf" | "toolBuf") => () => (this.p[field] = this.time.now + 220);
     this.keys.J.on("down", buf("atkBuf"));
@@ -126,7 +147,14 @@ export class DuelScene extends Phaser.Scene {
     this.input.on("pointerdown", (ptr: Phaser.Input.Pointer) => {
       if (!ptr.rightButtonDown()) this.p.atkBuf = this.time.now + 220;
     });
-    this.keys.R.on("down", () => this.reset(this.bossIdx));
+    this.keys.R.on("down", () => {
+      if (this.tutorialOn) {
+        this.p.hp = HERO.maxHp;
+        this.p.posture = 0;
+        return;
+      }
+      this.reset(this.bossIdx);
+    });
     this.keys.ESC.on("down", () => {
       this.scene.launch("menu", { mode: "pause" });
       this.scene.pause();
@@ -147,24 +175,33 @@ export class DuelScene extends Phaser.Scene {
     this.keys.T.on("down", () => this.refill());
     this.keys.Y.on("down", () => this.debugWake());
     ["Z", "X", "C", "V", "B"].forEach((k, i) => this.keys[k].on("down", () => this.def.dummyKeys[i] && this.forceMove(this.def.dummyKeys[i])));
-    this.keys.ONE.on("down", () => this.reset(0));
-    this.keys.TWO.on("down", () => this.reset(1));
+    this.keys.ONE.on("down", () => !this.tutorialOn && this.reset(this.idxOf("captain")));
+    this.keys.TWO.on("down", () => !this.tutorialOn && this.reset(this.idxOf("golem")));
 
     this.events.on("skills-closed", () => this.finishShrine());
-    this.hud = { hp: 1, posture: 0, heals: HERO.heals, bossVisible: false, bossName: BOSSES[0].name, bossHp: 1, bossSegs: BOSSES[0].segments, bossSeg: 0, bossPosture: 0, bossGuard: false, message: "", sub: "", auto: true, music: true, brain: "JEV", thinking: false, last: "", bossArmor: false, spirit: 0, maxSpirit: 3, riposte: false, art: false, tool: false };
+    this.hud = { hp: 1, posture: 0, heals: HERO.heals, bossVisible: false, bossName: BOSSES[0].name, bossHp: 1, bossSegs: BOSSES[0].segments, bossSeg: 0, bossPosture: 0, bossGuard: false, message: "", sub: "", auto: true, music: true, brain: "JEV", thinking: false, last: "", bossArmor: false, spirit: 0, maxSpirit: 3, riposte: false, art: false, tool: false, dialog: null, objective: null };
     this.registry.set("hud", this.hud);
     if (process.env.NODE_ENV !== "production") (window as unknown as { __duel?: DuelScene }).__duel = this; // for scripted tests
     this.scene.launch("duelhud");
-    this.reset(0);
+    for (const k of [this.keys.ENTER, this.keys.SPACE, this.keys.J]) k.on("down", () => this.dlgAdvance());
+    this.begin();
   }
 
+  /** The tests and dev mode (?dev=1) use the two bosses; the real game starts with the tutorial. */
+  private seq(): BossDef[] {
+    return this.registry.get("dev") ? BOSSES : ENCOUNTERS;
+  }
+  private idxOf(id: string) {
+    return Math.max(0, this.seq().findIndex((d) => d.id === id));
+  }
   private spawnBoss(idx: number) {
     this.bossIdx = idx;
-    this.def = BOSSES[idx];
+    this.def = this.seq()[idx];
     this.boss?.sprite.destroy();
     this.boss = new Fighter(this, this.def.prefix, this.man.sheets, this.def.radius, this.def.scale);
-    this.boss.x = this.world.spawns.boss.x;
-    this.boss.y = this.world.spawns.boss.y;
+    const home = this.def.training ? this.world.spawns.shade : this.world.spawns.boss;
+    this.boss.x = home.x;
+    this.boss.y = home.y;
     this.boss.face = -1;
     Object.assign(this.b, { hp: this.def.segmentHp, seg: 0, posture: 0, mode: "idle", since: this.time.now, until: 0, move: null, awake: false, held: false, holdIdx: 0, cd: {}, glyph: null, last: "", nextThink: 0,
       decision: null, asking: false, askId: this.b.askId + 1, nextAsk: 0, history: [], gates: [], moveToken: this.b.moveToken + 1, endSince: 0, res: [], armorUntil: 0, poiseUntil: 0, spawned: [], buffed: false });
@@ -310,8 +347,14 @@ export class DuelScene extends Phaser.Scene {
       this.hitstop -= deltaMs;
       this.player.sprite.anims.timeScale = 0;
       this.boss.sprite.anims.timeScale = 0;
+    } else if (this.dlg) {
+      this.updateDialogue(deltaMs / 1000);
+      this.player.sprite.anims.timeScale = 0;
+      this.boss.sprite.anims.timeScale = 0;
     } else {
       const dt = Math.min(deltaMs, 50) / 1000;
+      if (this.def.training && this.p.mode !== "dead") this.p.hp = Math.max(this.p.hp, 20); // tutorial mercy
+      this.movedTotal += dist(this.lastPx, this.lastPy, this.player.x, this.player.y);
       this.updatePlayer(now, dt);
       if (this.bossActive()) {
         const dd = dist(this.player.x, this.player.y, this.boss.x, this.boss.y);
@@ -324,7 +367,11 @@ export class DuelScene extends Phaser.Scene {
       this.updateBlades(now, dt);
       this.separate(dt);
       this.checkWake();
+      this.updateWaiters(now);
     }
+    this.lastPx = this.player.x;
+    this.lastPy = this.player.y;
+    this.updateNpc(now);
     this.player.tickFx(deltaMs);
     this.boss.tickFx(deltaMs);
     this.player.sync();
@@ -473,6 +520,7 @@ export class DuelScene extends Phaser.Scene {
         if (now - p.since >= HERO.healMs * (has("gourd") ? 0.7 : 1)) {
           p.hp = Math.min(HERO.maxHp, p.hp + HERO.healAmount);
           p.heals--;
+          this.tutEvent("heal");
           this.vfx.heal(f.x, f.y - 34);
           f.hitFlash(160, 0xc8ffd9);
           this.sfx.heal();
@@ -548,6 +596,187 @@ export class DuelScene extends Phaser.Scene {
     void ix; void iy;
   }
 
+  // ------------------------------------------------------------ dialogue, objectives and the tutorial
+  private clearInputBuffers() {
+    const p = this.p;
+    p.atkBuf = p.heavyBuf = p.rollBuf = p.kickBuf = p.healBuf = p.artBuf = p.toolBuf = 0;
+  }
+
+  say(who: string, lines: string[]): Promise<void> {
+    if (this.tutCancelled) return Promise.reject(new Error("cancelled"));
+    return new Promise((resolve) => {
+      this.dlg = { lines: lines.map((text) => ({ who, text })), i: 0, shown: 0, resolve };
+      this.clearInputBuffers();
+    });
+  }
+  private dlgAdvance() {
+    const d = this.dlg;
+    if (!d) return;
+    if (d.shown < d.lines[d.i].text.length) {
+      d.shown = d.lines[d.i].text.length;
+      return;
+    }
+    d.i++;
+    d.shown = 0;
+    if (d.i >= d.lines.length) {
+      this.dlg = null;
+      this.hud.dialog = null;
+      this.clearInputBuffers();
+      d.resolve();
+    }
+  }
+  private updateDialogue(dt: number) {
+    const d = this.dlg;
+    if (!d) return;
+    const line = d.lines[d.i];
+    const before = Math.floor(d.shown / 3);
+    d.shown = Math.min(line.text.length, d.shown + dt * 48);
+    if (Math.floor(d.shown / 3) !== before && d.shown < line.text.length) this.sfx.blip(line.who);
+    this.hud.dialog = { who: line.who, text: line.text.slice(0, Math.floor(d.shown)), done: d.shown >= line.text.length, i: d.i + 1, n: d.lines.length };
+  }
+
+  private until(cond: () => boolean, opts: { progress?: () => string; hints?: { afterMs: number; text: string }[]; timeoutMs?: number } = {}): Promise<boolean> {
+    if (this.tutCancelled) return Promise.reject(new Error("cancelled"));
+    return new Promise((resolve) => this.waiters.push({ cond, resolve, start: this.time.now, opts }));
+  }
+  private updateWaiters(now: number) {
+    for (const w of [...this.waiters]) {
+      const o = this.hud.objective;
+      if (w.cond()) {
+        this.waiters.splice(this.waiters.indexOf(w), 1);
+        if (o) {
+          this.sfx.skill();
+          this.popup(this.player.x, this.player.y - 80, "✓", "#7ee787");
+        }
+        w.resolve(true);
+        continue;
+      }
+      if (o) {
+        o.progress = w.opts.progress?.();
+        const hint = [...(w.opts.hints ?? [])].reverse().find((h) => now - w.start >= h.afterMs);
+        o.hint = hint?.text;
+      }
+      if (w.opts.timeoutMs && now - w.start > w.opts.timeoutMs) {
+        this.waiters.splice(this.waiters.indexOf(w), 1);
+        w.resolve(false);
+      }
+    }
+  }
+
+  isTutorial() {
+    return this.tutorialOn;
+  }
+  /** Skips the rest of the tutorial (pause menu). */
+  skipTutorial() {
+    if (!this.tutorialOn) return;
+    this.tutCancelled = true;
+    this.dlg = null;
+    this.hud.dialog = null;
+    this.waiters.splice(0).forEach((w) => w.resolve(false));
+    this.finishTutorial();
+  }
+
+  /** Which encounter to start with when loading a save. */
+  private firstEncounter() {
+    const seq = this.seq();
+    const i = seq.findIndex((d) => !d.training && !save.cleared.includes(d.id));
+    return i < 0 ? seq.length - 1 : i;
+  }
+  private begin() {
+    if (this.registry.get("dev")) return this.reset(0);
+    if (!save.tutorialDone) {
+      this.reset(this.idxOf("shade"));
+      this.startTutorial();
+    } else this.reset(this.firstEncounter());
+  }
+
+  private startTutorial() {
+    this.tutorialOn = true;
+    this.tutCancelled = false;
+    this.b.awake = true;
+    this.b.auto = false;
+    this.hud.bossVisible = true;
+    this.world.gateOpen = false; // the way north stays sealed until the lessons are done
+    this.sfx.playMusic("temple", 0.2);
+    // the Instructor: a pale, translucent echo of the hero
+    const sp = this.world.spawns.npc;
+    this.npc = new Fighter(this, "hero", this.man.sheets, 6, 1);
+    this.npc.x = sp.x;
+    this.npc.y = sp.y;
+    this.npc.sprite.setAlpha(0.55).setTintFill(0x9fd0ff); // a flat, translucent blue silhouette
+    this.npc.play("idle", undefined, { loop: true });
+    this.npcLabel = this.add.text(sp.x, sp.y - 70, "INSTRUCTOR", { fontFamily: "monospace", fontSize: "8px", color: "#9fd0ff", stroke: "#000", strokeThickness: 2 }).setOrigin(0.5).setDepth(60).setResolution(2);
+
+    const self = this;
+    const host: TutorialHost = {
+      say: (who, lines) => self.say(who, lines),
+      objective: (o) => { self.hud.objective = o ? { ...o } : null; },
+      count: (k) => self.cnt[k] ?? 0,
+      resetCounts: () => { self.cnt = {}; self.movedBase = self.movedTotal; },
+      until: (cond, opts) => self.until(cond, opts),
+      shade: {
+        loop: (moves, gap) => { self.shadeLoop = { moves, gap, i: 0, next: Infinity }; },
+        stop: () => { self.shadeLoop = null; self.shadeGuardEvery = 0; },
+        guardLoop: (every) => { self.shadeGuardEvery = every; self.shadeGuardNext = self.time.now + 1200; },
+        speed: (mul) => { self.shadeSpeed = mul; },
+      },
+      ringAid: (on) => { self.ringAidOn = on; },
+      player: {
+        setHp: (f) => { self.p.hp = HERO.maxHp * f; },
+        giveHeals: (n) => { self.p.heals = Math.max(self.p.heals, n); },
+        fill: () => { self.p.hp = HERO.maxHp; self.p.posture = 0; },
+        giveSpirit: (n) => { self.p.spirit = Math.min(self.maxSpirit(), Math.max(self.p.spirit, n)); },
+      },
+      openShrine: () => self.shrineWait(),
+      finish: async () => self.finishTutorial(),
+      moved: () => self.movedTotal - self.movedBase,
+    };
+    runTutorial(host).catch((e: Error) => {
+      if (e?.message !== "cancelled") console.error(e);
+    });
+  }
+
+  private shrineWait(): Promise<void> {
+    if (this.registry.get("dev")) return Promise.resolve();
+    return new Promise((resolve) => {
+      this.shrineResolve = resolve;
+      this.scene.launch("skills", { from: "duel" });
+      this.scene.pause();
+    });
+  }
+
+  private finishTutorial() {
+    if (!this.tutorialOn) return;
+    this.tutorialOn = false;
+    this.shadeLoop = null;
+    this.shadeGuardEvery = 0;
+    this.ringAidOn = false;
+    this.hud.objective = null;
+    save.tutorialDone = true;
+    saveGame();
+    this.p.hp = HERO.maxHp;
+    this.p.posture = 0;
+    this.world.gateOpen = true;
+    const shade = this.boss;
+    this.tweens.add({ targets: [shade.sprite, this.npc?.sprite, this.npcLabel].filter(Boolean), alpha: 0, duration: 900, onComplete: () => { this.npc?.sprite.destroy(); this.npcLabel?.destroy(); this.npc = undefined; } });
+    this.time.delayedCall(950, () => {
+      if (this.def.id !== "shade") return;
+      this.spawnBoss(this.bossIdx + 1);
+      this.hud.bossVisible = false;
+      this.sfx.playMusic("castle", 0.22);
+      this.hooks.onLog("tutorial complete: the gate is open");
+    });
+  }
+
+  private updateNpc(now: number) {
+    const n = this.npc;
+    if (!n) return;
+    n.face = this.player.x >= n.x ? 1 : -1;
+    n.sync();
+    n.sprite.y += Math.sin(now / 420) * 2.5 - 4; // hovers
+    this.npcLabel?.setPosition(n.x, n.y - 72 + Math.sin(now / 420) * 2.5);
+  }
+
   // ---- thrown blades (tool)
   private spawnBlade() {
     const f = this.player, a = this.aimAtBoss();
@@ -572,6 +801,7 @@ export class DuelScene extends Phaser.Scene {
   }
 
   private bladeHitsBoss(now: number) {
+    this.tutEvent("blade");
     const b = this.b, bp = this.chest(this.boss, this.def.headY * 0.45);
     this.sfx.bladeHit();
     this.vfx.hit(bp.x, bp.y, false, 0xdfe9ff);
@@ -592,6 +822,7 @@ export class DuelScene extends Phaser.Scene {
     }
     const armored = now < b.armorUntil;
     b.hp -= 6 * (armored ? 0.5 : 1) * DIFFICULTY[settings.difficulty].dealt;
+    if (this.def.training) b.hp = this.def.segmentHp;
     b.posture = Math.min(100, b.posture + 8 * (armored ? 0.7 : 1));
     b.lastPostureHit = now;
     this.boss.hitFlash(60, 0xdfe9ff);
@@ -668,6 +899,7 @@ export class DuelScene extends Phaser.Scene {
         return;
       }
       if (mv.id === "KICK" || mv.id === "WHIRL") {
+        this.tutEvent(mv.id === "KICK" ? "kickbreak" : "whirl");
         b.posture = Math.min(100, b.posture + 28);
         b.lastPostureHit = now;
         this.setB("flinch", 900);
@@ -695,6 +927,12 @@ export class DuelScene extends Phaser.Scene {
 
     const armored = now < b.armorUntil;
     b.hp -= h.damage * (armored ? 0.5 : 1) * DIFFICULTY[settings.difficulty].dealt;
+    if (this.def.training) b.hp = this.def.segmentHp; // the Shade cannot be hurt, only broken
+    this.tutEvent("hit");
+    if (h.type === "heavy") this.tutEvent("heavy");
+    if (mv.id === "RIPOSTE") this.tutEvent("riposte");
+    if (mv.id === "ROLLCUT") this.tutEvent("rollcut");
+    if (mv.id === "WHIRL") this.tutEvent("whirl");
     b.posture = Math.min(100, b.posture + h.posture * (armored ? 0.7 : 1));
     b.lastPostureHit = now;
     this.boss.hitFlash(70);
@@ -725,6 +963,7 @@ export class DuelScene extends Phaser.Scene {
 
   private breakBoss(now: number, ms: number) {
     const b = this.b;
+    this.tutEvent("break");
     this.boss.freeze(false);
     b.held = false;
     this.setB("broken", ms);
@@ -759,6 +998,14 @@ export class DuelScene extends Phaser.Scene {
     this.cameras.main.shake(260, 0.01);
     this.popup(this.boss.x, this.boss.y - this.def.headY - 14, "DEATHBLOW", "#ff5d5d");
     this.burst(this.boss.x, this.boss.y - this.def.headY * 0.45, 30, 0xff5d5d, 200, 2.5);
+    if (this.def.training) {
+      this.tutEvent("deathblow");
+      b.posture = 0;
+      this.boss.freeze(false);
+      this.setB("flinch", 1600);
+      this.boss.play(this.def.anims.hit, undefined, { restart: true });
+      return;
+    }
     if (b.seg >= this.def.segments - 1) return this.killBoss();
     b.seg++;
     b.hp = this.def.segmentHp;
@@ -784,9 +1031,9 @@ export class DuelScene extends Phaser.Scene {
     this.beams.forEach((p) => p.spr.destroy());
     this.projs = [];
     this.beams = [];
-    const more = this.bossIdx + 1 < BOSSES.length;
+    const more = this.bossIdx + 1 < this.seq().length;
     this.hud.message = more ? "DEMISE" : "VICTORY";
-    this.hud.sub = more ? `${BOSSES[this.bossIdx + 1].name} stirs…` : "R to fight again";
+    this.hud.sub = more ? `${this.seq()[this.bossIdx + 1].name} stirs…` : "R to fight again";
     this.sfx.playMusic("temple", 0.22);
     this.hooks.onLog(`${this.def.name} defeated`);
     awardPoint(1);
@@ -813,9 +1060,22 @@ export class DuelScene extends Phaser.Scene {
     this.scene.pause();
   }
   private finishShrine() {
+    if (this.shrineResolve) {
+      const r = this.shrineResolve;
+      this.shrineResolve = null;
+      r();
+      return;
+    }
     if (!this.pendingNext) return;
     this.pendingNext = false;
     this.nextBoss();
+  }
+  private tutEvent(name: string) {
+    this.cnt[name] = (this.cnt[name] ?? 0) + 1;
+  }
+  private outcome(move: string, oc: Parameters<Telemetry["outcome"]>[1]) {
+    this.tel.outcome(move, oc);
+    this.tutEvent(`${move}:${oc}`);
   }
   private maxSpirit() {
     return SPIRIT.base + (has("well") ? SPIRIT.wellBonus : 0);
@@ -835,7 +1095,7 @@ export class DuelScene extends Phaser.Scene {
     this.sfx.locked();
   }
   private beatMode() {
-    return settings.beat === "beat";
+    return settings.beat === "beat" && !this.def.training;
   }
   private beatMs() {
     return 60000 / this.sfx.bpm;
@@ -885,6 +1145,23 @@ export class DuelScene extends Phaser.Scene {
   private deflectMs() {
     return DIFFICULTY[settings.difficulty].deflectMs + (has("keen") ? 40 : 0);
   }
+  /** The tutorial drives the Shade: it telegraphs a scripted list of moves, one after another. */
+  private runShade(now: number) {
+    const L = this.shadeLoop;
+    if (L) {
+      if (L.next === Infinity) L.next = now + L.gap;
+      if (now >= L.next && this.p.mode !== "dead") {
+        const id = L.moves[L.i++ % L.moves.length];
+        L.next = Infinity;
+        this.forceMove(id);
+        return;
+      }
+    }
+    if (this.shadeGuardEvery && now >= this.shadeGuardNext) {
+      this.forceGuard();
+      this.shadeGuardNext = now + this.shadeGuardEvery;
+    }
+  }
   private phase(): 1 | 2 {
     return this.b.seg >= 1 ? 2 : 1;
   }
@@ -906,6 +1183,7 @@ export class DuelScene extends Phaser.Scene {
     const d = dist(f.x, f.y, this.player.x, this.player.y);
     if (!f.flashing) {
       if (now < b.armorUntil) f.sprite.setTint(0x9fe8ff);
+      else if (this.def.tint) f.sprite.setTint(this.def.tint);
       else f.sprite.clearTint();
     }
     const faceP = () => (f.face = this.player.x >= f.x ? 1 : -1);
@@ -914,6 +1192,7 @@ export class DuelScene extends Phaser.Scene {
       case "idle":
         faceP();
         f.play(this.def.anims.idle, undefined, { loop: true });
+        if (this.def.training) this.runShade(now);
         if (b.auto && this.p.mode !== "dead") {
           this.ensureRequest(now);
           this.takeDecision(now);
@@ -1178,7 +1457,7 @@ export class DuelScene extends Phaser.Scene {
   }
 
   private endProjectile(pr: Proj) {
-    if (!pr.consumed && !pr.reflected) this.tel.outcome(pr.moveId, pr.dodged ? "dodged" : "missed");
+    if (!pr.consumed && !pr.reflected) this.outcome(pr.moveId, pr.dodged ? "dodged" : "missed");
     pr.consumed = true;
     this.burst(pr.x, pr.y - 20, 8, 0xcfc7b8, 90, 1.8);
     pr.spr.destroy();
@@ -1221,7 +1500,7 @@ export class DuelScene extends Phaser.Scene {
       if (this.p.mode === "guard") {
         const inWindow = !this.p.noDeflect && now - this.p.guardSince <= this.deflectMs();
         if (inWindow) {
-          this.tel.outcome(pr.moveId, "deflected");
+          this.outcome(pr.moveId, "deflected");
           this.hurtPlayer(h, "deflect", now);
           pr.consumed = false;
           pr.reflected = true;
@@ -1230,12 +1509,12 @@ export class DuelScene extends Phaser.Scene {
           pr.spr.setRotation(pr.spr.rotation + Math.PI);
           pr.born = now;
         } else {
-          this.tel.outcome(pr.moveId, "blocked");
+          this.outcome(pr.moveId, "blocked");
           this.hurtPlayer(h, "block", now);
           pr.spr.destroy();
         }
       } else {
-        this.tel.outcome(pr.moveId, "hit");
+        this.outcome(pr.moveId, "hit");
         this.hurtPlayer(h, "hit", now);
         pr.spr.destroy();
       }
@@ -1262,12 +1541,12 @@ export class DuelScene extends Phaser.Scene {
         if (this.isIframes(now)) bm.dodged = true;
         else {
           bm.hit = true;
-          this.tel.outcome(bm.moveId, "hit");
+          this.outcome(bm.moveId, "hit");
           this.hurtPlayer({ frames: [0, 0], type: "sweep", damage: bm.dmg, posture: bm.post, deflectPosture: 0, shape: { kind: "circle", range: 0 } }, "hit", now);
         }
       }
       if (now >= bm.until) {
-        if (!bm.hit) this.tel.outcome(bm.moveId, bm.dodged ? "dodged" : "missed");
+        if (!bm.hit) this.outcome(bm.moveId, bm.dodged ? "dodged" : "missed");
         bm.spr.destroy();
         bm.until = -1;
       }
@@ -1348,7 +1627,9 @@ export class DuelScene extends Phaser.Scene {
 
     if (!b.held && b.holdIdx < holds.length && fr >= holds[b.holdIdx].frame) {
       b.held = true;
-      b.holdUntil = now + (b.plan ? b.plan[b.holdIdx] : holds[b.holdIdx].ms * m.hold);
+      const holdMs = (b.plan ? b.plan[b.holdIdx] : holds[b.holdIdx].ms * m.hold) * (this.def.training ? this.shadeSpeed : 1);
+      b.holdUntil = now + holdMs;
+      b.holdTotal = holdMs;
       b.holdIdx++;
     }
     if (b.held && now >= b.holdUntil) {
@@ -1393,7 +1674,7 @@ export class DuelScene extends Phaser.Scene {
       if (fr > h.frames[1]) {
         if (!b.res[i]) {
           b.res[i] = b.dodged[i] ? "dodged" : "missed";
-          this.tel.outcome(mv.id, b.res[i]!);
+          this.outcome(mv.id, b.res[i]!);
         }
         return void (b.hit[i] = true);
       }
@@ -1429,7 +1710,7 @@ export class DuelScene extends Phaser.Scene {
         b.slipped = true;
         b.hit[i] = true;
         b.res[i] = "slipped";
-        this.tel.outcome(mv.id, "slipped");
+        this.outcome(mv.id, "slipped");
         this.slip(now);
       }
       return; // dodged: not consumed, so a late roll end can still be hit within the window
@@ -1439,17 +1720,17 @@ export class DuelScene extends Phaser.Scene {
 
     if (h.type === "grab") {
       b.res[i] = "hit";
-      this.tel.outcome(mv.id, "hit");
+      this.outcome(mv.id, "hit");
       return this.hurtPlayer(h, "grab", now);
     }
     if (p.mode === "guard" && (h.type === "normal" || h.type === "heavy")) {
       const inWindow = !p.noDeflect && now - p.guardSince <= this.deflectMs();
       b.res[i] = inWindow ? "deflected" : "blocked";
-      this.tel.outcome(mv.id, b.res[i]!);
+      this.outcome(mv.id, b.res[i]!);
       return this.hurtPlayer(h, inWindow ? "deflect" : "block", now);
     }
     b.res[i] = "hit";
-    this.tel.outcome(mv.id, "hit");
+    this.outcome(mv.id, "hit");
     this.hurtPlayer(h, "hit", now);
   }
 
@@ -1482,6 +1763,7 @@ export class DuelScene extends Phaser.Scene {
 
     if (kind === "deflect") {
       this.tel.record("deflect", now);
+      this.tutEvent("deflect");
       this.gainSpirit(1 + (has("echo") ? 1 : 0));
       this.openRiposte(now, SPIRIT.riposteMs);
       b.posture = Math.min(100, b.posture + h.deflectPosture * (has("wrist") ? 1.3 : 1));
@@ -1501,6 +1783,7 @@ export class DuelScene extends Phaser.Scene {
     }
     const dmgMul = (this.time.now < this.b.armorUntil ? 1.25 : 1) * DIFFICULTY[settings.difficulty].received;
     if (kind === "block") {
+      this.tutEvent("block");
       p.hp -= h.damage * dmgMul * HERO.chipFraction;
       p.posture += h.posture;
       p.lastPostureHit = now;
@@ -1586,6 +1869,15 @@ export class DuelScene extends Phaser.Scene {
     if (now < this.p.riposteUntil && this.p.mode !== "dead") {
       const rp = 0.5 + 0.5 * Math.sin(now / 70);
       g.lineStyle(2, 0xfff2b0, 0.5 + 0.4 * rp).strokeEllipse(this.player.x, this.player.y, 30 + rp * 6, 12 + rp * 3);
+    }
+    // timing ring: closes in on the boss during a telegraph hold (training, and the Assist difficulty)
+    if ((this.ringAidOn || (settings.difficulty === "assist" && !this.def.training)) && this.b.mode === "attack" && this.b.held && this.b.holdTotal > 0 && this.b.move && this.actAfter(this.b.move, this.b.move.holds?.[this.b.holdIdx - 1]?.frame ?? 99) !== null) {
+      // the ring closes at the moment of IMPACT (the animation still has a frame or two to travel after the hold ends)
+      const mvR = this.b.move!, hf = mvR.holds?.[this.b.holdIdx - 1]?.frame ?? 0, nf = this.actAfter(mvR, hf) ?? hf;
+      const travel = ((nf - hf) * 1000) / (mvR.fps * this.mul().fps);
+      const left = Math.max(0, Math.min(1, (this.b.holdUntil + travel - now) / (this.b.holdTotal + travel)));
+      const r = 12 + 56 * left;
+      g.lineStyle(3, left < 0.18 ? 0xffffff : 0xffd36b, 0.9).strokeCircle(this.boss.x, this.boss.y - this.def.headY * 0.5, r);
     }
     // choreographed mode: a faint pulse on the floor under the boss at every beat
     if (this.beatMode() && this.bossActive()) {

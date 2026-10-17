@@ -47,12 +47,12 @@ def pt(i, name, tx, ty, typ="spawn"):
     return {"id": i, "name": name, "type": typ, "x": tx * T, "y": ty * T, "width": 0, "height": 0, "point": True, "rotation": 0, "visible": True}
 
 objects = {"id": 3, "name": "objects", "type": "objectgroup", "draworder": "topdown", "opacity": 1, "visible": True, "x": 0, "y": 0,
-           "objects": [pt(1, "player", 40, 50), pt(2, "boss", 40, 14), pt(3, "gate", 40, 32, "gate"),
+           "objects": [pt(1, "player", 40, 51), pt(2, "boss", 40, 14), pt(3, "gate", 40, 32, "gate"), pt(5, "shade", 40, 43), pt(6, "npc", 33, 49),
                        {"id": 4, "name": "arena", "type": "arena", "x": 12 * T, "y": 6 * T, "width": 56 * T, "height": 23 * T,
                         "rotation": 0, "visible": True}]}
 
 m = {"compressionlevel": -1, "width": W, "height": H, "tilewidth": T, "tileheight": T, "infinite": False, "orientation": "orthogonal",
-     "renderorder": "right-down", "type": "map", "version": "1.10", "tiledversion": "1.10.2", "nextlayerid": 4, "nextobjectid": 5,
+     "renderorder": "right-down", "type": "map", "version": "1.10", "tiledversion": "1.10.2", "nextlayerid": 4, "nextobjectid": 7,
      "layers": [layer(1, "ground", ground), layer(2, "walls", walls), objects],
      "tilesets": [{"firstgid": 1, "name": "duel_tiles", "image": "../duel-assets/tiles/duel_tiles.png", "imagewidth": 112, "imageheight": 48,
                    "tilewidth": T, "tileheight": T, "columns": COLS, "tilecount": 21, "margin": 0, "spacing": 0}]}

@@ -55,3 +55,7 @@ Core moves are always available (light chain, heavy, guard/deflect, roll, kick, 
 | Tools | Throwing Blades (I, 1 spirit: ranged posture chip), Spirit Well (+2 max spirit), Quick Gourd (30% faster heal) |
 
 Jev sees your spirit, riposte readiness, unlocked skills and how often you use arts and tools. `node tests/duel/skills.mjs` covers all of it.
+
+### The tutorial
+
+A new game starts in the monastery courtyard with an **Instructor** (a pale spirit) who teaches in RPG-style dialogue boxes: move, strike, block, deflect, riposte, sweep (yellow, low rumble), perilous thrust (red, chime) with the slip, grab (purple, whisper), posture and deathblow, kick, heal, the shrine, any skill you pick, and a final test against the **Sparring Shade**. The Shade is the Captain's moveset telegraphed 1.9x slower and hitting lightly; it cannot die. A timing ring closes on it at the moment of impact (also available as the Assist difficulty's aid). An objective panel shows progress and gives hints when you are stuck; HP never falls below 20 during lessons; Esc > Skip tutorial ends it. The gate north stays sealed until you finish. `node tests/duel/tutorial.mjs` plays it through.

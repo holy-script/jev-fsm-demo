@@ -38,8 +38,9 @@ export interface SaveData {
   deaths: number;
   skills: string[]; // unlocked skill ids
   points: number; // unspent skill points
+  tutorialDone: boolean;
 }
-const FRESH: SaveData = { cleared: [], deaths: 0, skills: [], points: 2 };
+const FRESH: SaveData = { cleared: [], deaths: 0, skills: [], points: 2, tutorialDone: false };
 export const save: SaveData = read("duel.save", { ...FRESH });
 export const saveGame = () => write("duel.save", save);
 export const resetSave = () => {

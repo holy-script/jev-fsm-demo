@@ -16,6 +16,13 @@ export class HudScene extends Phaser.Scene {
   private help!: Phaser.GameObjects.Text;
   private brain!: Phaser.GameObjects.Text;
   private riposteText!: Phaser.GameObjects.Text;
+  private dlgWho!: Phaser.GameObjects.Text;
+  private dlgText!: Phaser.GameObjects.Text;
+  private dlgMore!: Phaser.GameObjects.Text;
+  private objTitle!: Phaser.GameObjects.Text;
+  private objText!: Phaser.GameObjects.Text;
+  private objProg!: Phaser.GameObjects.Text;
+  private objHint!: Phaser.GameObjects.Text;
 
   constructor() {
     super("duelhud");
@@ -29,6 +36,13 @@ export class HudScene extends Phaser.Scene {
     this.bossName = this.add.text(VIEW_W / 2, 22, "", { ...font, fontSize: "16px", strokeThickness: 4 }).setOrigin(0.5, 0);
     this.brain = this.add.text(28, VIEW_H - 92, "", { ...font, fontSize: "13px", strokeThickness: 3 }).setOrigin(0, 0);
     this.riposteText = this.add.text(VIEW_W / 2, VIEW_H - 86, "RIPOSTE  [J]", { ...font, fontSize: "18px", color: "#fff2b0", strokeThickness: 4 }).setOrigin(0.5).setVisible(false);
+    this.dlgWho = this.add.text(VIEW_W / 2 - 430, VIEW_H - 286, "", { ...font, fontSize: "17px", color: "#9fd0ff", strokeThickness: 4 }).setDepth(5);
+    this.dlgText = this.add.text(VIEW_W / 2 - 430, VIEW_H - 258, "", { ...font, fontSize: "21px", wordWrap: { width: 860 }, lineSpacing: 6, strokeThickness: 3 }).setDepth(5);
+    this.dlgMore = this.add.text(VIEW_W / 2 + 420, VIEW_H - 196, "▼", { ...font, fontSize: "18px", color: "#ffd36b", strokeThickness: 3 }).setOrigin(1, 0.5).setDepth(5);
+    this.objTitle = this.add.text(36, 104, "", { ...font, fontSize: "15px", color: "#ffd36b", strokeThickness: 3 });
+    this.objText = this.add.text(36, 126, "", { ...font, fontSize: "16px", wordWrap: { width: 330 }, strokeThickness: 3 });
+    this.objProg = this.add.text(36, 150, "", { ...font, fontSize: "15px", color: "#7ee787", strokeThickness: 3 });
+    this.objHint = this.add.text(36, 174, "", { ...font, fontSize: "14px", color: "#9aa4b2", wordWrap: { width: 330 }, strokeThickness: 3 });
     this.help = this.add
       .text(VIEW_W - 12, VIEW_H - 10, "J attack · K heavy · SPACE guard (tap = deflect) · SHIFT roll · E kick · Q heal · F brain · M music · R retry", { ...font, fontSize: "12px", strokeThickness: 3 })
       .setOrigin(1, 1)
@@ -79,6 +93,26 @@ export class HudScene extends Phaser.Scene {
       this.bossName.setText(s.bossName).setVisible(true);
     } else this.bossName.setVisible(false);
 
+    // dialogue box
+    const dl = s.dialog;
+    if (dl) {
+      g.fillStyle(0x07090d, 0.88).fillRect(VIEW_W / 2 - 450, VIEW_H - 300, 900, 128);
+      g.lineStyle(2, dl.who === "INSTRUCTOR" ? 0x4a7aa8 : 0x6b5a3a, 1).strokeRect(VIEW_W / 2 - 450, VIEW_H - 300, 900, 128);
+    }
+    this.dlgWho.setText(dl ? dl.who : "");
+    this.dlgText.setText(dl ? dl.text : "");
+    this.dlgMore.setVisible(!!dl?.done).setAlpha(0.5 + 0.5 * Math.sin(this.time.now / 160));
+    // objective panel
+    const ob = s.objective;
+    this.objTitle.setText(ob ? `LESSON · ${ob.title}` : "");
+    this.objText.setText(ob?.text ?? "");
+    this.objProg.setText(ob?.progress ?? "").setY(this.objText.y + this.objText.height + 8);
+    this.objHint.setText(ob?.hint ? `Hint: ${ob.hint}` : "").setY(this.objProg.y + (ob?.progress ? 24 : 0));
+    if (ob) {
+      const bottom = ob.hint ? this.objHint.y + this.objHint.height : ob.progress ? this.objProg.y + 22 : this.objText.y + this.objText.height;
+      g.fillStyle(0x07090d, 0.8).fillRect(26, 92, 350, bottom - 92 + 12);
+      g.lineStyle(1, 0x6b5a3a, 1).strokeRect(26, 92, 350, bottom - 92 + 12);
+    }
     const dots = ".".repeat(1 + (Math.floor(this.time.now / 250) % 3));
     this.brain.setVisible(s.bossVisible).setColor(s.brain === "JEV" ? "#8fd0ff" : "#ffd36b").setText(`BRAIN ${s.brain}${s.thinking ? " thinking" + dots : ""}${s.last ? "   " + s.last : ""}`);
 

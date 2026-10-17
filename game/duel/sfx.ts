@@ -19,7 +19,7 @@ export class Sfx {
     const TRIM: Record<string, number> = {
       swing: 6.5, hit: 9, deflect: 5, block: 6.5, guardBreak: 3, postureBreak: 4, deathblow: 0, hurt: 7, roll: 8.5, heal: 0, slip: 3.5,
       stoneHit: 2.5, throwFist: 4.5, buff: 2, charge: 6, beamFire: 0, warn: 2.5, thud: 0, whoosh: 0, clash: 3,
-      riposteReady: 3, spirit: 2, whirl: 5, throwBlade: 5, bladeHit: 7, locked: 0, skill: 0,
+      blip: 0, riposteReady: 3, spirit: 2, whirl: 5, throwBlade: 5, bladeHit: 7, locked: 0, skill: 0,
     };
     for (const [name, db] of Object.entries(TRIM)) {
       const orig = (this as unknown as Record<string, (...a: unknown[]) => void>)[name].bind(this);
@@ -257,6 +257,14 @@ export class Sfx {
       this.tone(o, "sawtooth", 160, 900, 0.34, 0.7, 0.15);
       this.tone(o, "sine", 320, 1800, 0.22, 0.7, 0.15);
     }
+  }
+
+  /** Dialogue typewriter tick; the Instructor's voice is a soft low tone, the narrator a higher one. */
+  blip(who: string) {
+    const o = this.out();
+    if (!o) return;
+    const f = who === "INSTRUCTOR" ? 210 + Math.random() * 30 : 330 + Math.random() * 40;
+    this.tone(o, "triangle", f, f * 0.96, 0.05, 0.003, 0.05);
   }
 
   // ------------------------------------------------------------------ skills
