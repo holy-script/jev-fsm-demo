@@ -1,6 +1,6 @@
 # 09. v4 plan: "ARENA" proper demo
 
-Status: **plan, nothing built yet.** Decisions taken with the user: free assets only; v4 is a new route `/arena` in `game/v4/` (v3 `/duel` stays untouched and playable); the setting follows the environment packs (forest, ruined river temple, graveyard), so the v3 monastery/foundry/summit story is rewritten.
+Status: **Phase 0 (assets) done, see section 9.** Phase 1 next. Decisions taken with the user: free assets only; v4 is a new route `/arena` in `game/v4/` (v3 `/duel` stays untouched and playable); the setting follows the environment packs (forest, ruined river temple, graveyard), so the v3 monastery/foundry/summit story is rewritten.
 
 Goal: a polished 10 to 15 minute demo where Jev is visibly the enemy's brain, with a consistent art style, better environments, richer combat (combos, reverse-animation parries, quick-time events) and a real UI.
 
@@ -26,11 +26,11 @@ Paid-only, **not used**: Shadow Stalker, Light Valkyrie, Lightning Ronin, every 
 
 Final boss without a paid pack: **"Echo"**, a palette-swapped Fire Knight (the player's mirror). Jev is given the boss-memory of how the player fought (see v3 boss memory, doc 05 and 02) and picks counters. It is thematically strong and costs no art.
 
-Open risks to resolve in Phase 0 (the pages do not state them): sprite pixel sizes and frame counts per animation, whether each free zip has separate frames or sheets, which pimen packs are free (only Slashes and Thrusts, Hit Spark are confirmed pay $0; Dark, Holy, Fire 01, Ice 01, Thunder 01, Earth 01, Wind 01, Water 01, Wood, Acid show no price and must be checked). Pimen packs already in `assets/packs3`: dark-spell-effect, holy-spell-effect, thunder-spell-effect-01, smoke-vfx-1, cutting-and-healing.
+The open risks listed here at planning time are resolved in section 9.
 
 ### immunitys environments
 Free name-your-price (verify each): Forgotten Memories 32x32 (autumn forest, river, waterfall, stone paths), Forest Top-Down 32x32, Pixel RPG UI Pack, RPG Icon Pack 32x32/24x24, Top Down Skeletons #1/#2, Goblin Sprite Pack #1.
-Risk: **skeleton/goblin sprites are top-down, the chierit heroes are side-view.** v3 already mixes top-down movement with side-view sprites, but top-down enemy art may clash. Decide at Phase 0 after seeing them; fall back to Cthulu/Demon Slime as grunts. Tilesets are forest/ruins only; no foundry or lava. Areas are therefore: Forest Edge, River Shrine (water, waterfall), Ruined Graveyard/Temple, and a night or dusk variant of one of them for the final.
+**Resolved in Phase 0: the skeleton/goblin packs are not usable as enemies** (32x32 top-down, idle and walk in four directions only, weapons as separate overlay sheets, no attack/hit/death). Grunts come from Cthulu, Demon Slime and Frost Guardian (free: idle walk 1_atk take_hit death) instead. Tilesets are forest/ruins only; no foundry or lava. Areas are therefore: Forest Edge, River Shrine (water, waterfall), Ruined Graveyard/Temple, and a night or dusk variant of one of them for the final.
 
 ### Reuse from v3
 Ninja Adventure music (5 tracks, beat-analysed), sword clash/swing sounds (CC0), v-ktor hit sparks (CC BY), Pimen smoke/heal. Szadi, Darkpixel and Clembod art are dropped in v4, which removes the mixed-art look and the no-redistribution worry from Bringer.
@@ -96,3 +96,34 @@ Game feel can only be judged by a human; plan a play-test after Phase 2 and agai
 ## 8. Rules of engagement (carry over from v3)
 
 Jev picks, the engine executes; every Jev call has a fallback; never block the game on the network; never commit `.env`, `assets/`, `public/*-assets/` or `links.txt`; never print the API key; do not edit game code while a long Playwright run is in progress; commit and push after each coherent change.
+
+## 9. Phase 0 results (2026-10-17)
+
+**Pipeline.** `npm run assets:download:arena` (`tools/itch_download.mjs arena`, into `assets/_dl4`), unzip/unrar with `bsdtar` into `assets/packs4/<slug>/<zip>/`, then `npm run assets:arena` (`tools/prep_arena_assets.py`, writes `public/arena-assets/`, gitignored). `tools/itch_survey.mjs` lists what an itch page offers without downloading (use it before adding any pack; pages needing payment show no download button). `tools/arena_inventory.py` prints every animation folder with canvas, frame count and bbox. Check output visually in the lab: **`/arena/lab`** (characters with forward/reverse/ping-pong playback and a scrubber, all VFX, raw tile/UI images).
+
+**Downloaded and verified free:** all 7 chierit Elementals human sets (Fire Knight, Metal Bladekeeper, Crystal Mauler, Wind Hashashin, Water Priestess, Ground Monk, Leaf Ranger), Free Cthulu, Demon Slime free, Frost Guardian free, Lively NPCs; **24 pimen packs** (every element: fire 1+2, water 1+2, ice 1, thunder 1+2, earth 1+2, wind 1+2, wood, acid, dark, holy, plus hit spark, slashes and thrusts, smoke 1+3, halloween, magical animation pack, thrust, cutting and healing; the 18 buff/debuff packs, mega packs, explosions and projectiles, ice 2, smoke 2/4, and the "03" element packs are paid); immunitys Forgotten Memories 32x32 tileset (autumn forest, river, cliffs, waterfall, bridges), Resurrected RPG forest tileset, Pixel RPG UI pack (parchment/book/scroll style), icons 24 and 32. Seven itch pages timed out on a second download button (rar and zip duplicates); the first file arrived, nothing needed is missing except pimen "Effects" (pixel-battle-effects) and Heal/Gameboy sheets.
+
+**Character data (frames per animation; canvas 288x128, sprite about 45 px tall, so render at 3x):**
+
+| Pack | Chain | Special and extras |
+|---|---|---|
+| Fire Knight (fk) | 1_atk 11, 2_atk 19, 3_atk 28 | sp_atk 18, air_atk 8, roll 8, defend 10, take_hit 6, death 13, run 8, jump |
+| Metal Bladekeeper (mb) | 6, 8, 18 | sp_atk 11, projectile_cast 7 + land 5, trap_cast 10 + land/detonate, defend 12 |
+| Crystal Mauler (cm) | 7, 7, 17 | sp_atk 15, defend 9, take_hit 6, death 15 |
+| Wind Hashashin (wh) | 8, 18, 26 | sp_atk 30, roll 6, death 19 |
+| Water Priestess (wp) | 7, 21, 27 | sp_atk 32, heal 12, surf, tumble, defend 12 |
+| Ground Monk (gm) | 6, 12, 23 | sp_atk 25, meditate 16, defend 13 |
+| Leaf Ranger (lr) | 10, 15, 12 | sp_atk 17, arrow_shower 18, arrow hit/entangle/poison effects, slide, defend 19 |
+| Cthulu (cth) | 1atk 7, 2atk 9 | fly, hurt 5, death 11 (canvas 192x112) |
+| Demon Slime (dsl) | cleave 15 | idle walk take_hit death 22 (canvas 288x160) |
+| Frost Guardian (fg) | 1_atk 14 | idle walk take_hit death (canvas 192x128) |
+
+All 3 attacks have a visible wind-up and the third hit is long (17 to 28 frames), which suits combo finishers and the reverse-parry (a clean wind-up frame range exists to scrub). Frame counts differ a lot between characters, so every move must carry its own `windupFrames`, `activeFrames`, `recoverFrom` in data (measured per sheet) rather than a global timing.
+
+**VFX slicing.** Pimen sheets carry no frame metadata. `detect_grid` takes the finest clean cut (every cell boundary only crosses transparent pixels), uses aspect ratio to pick rows, and falls back to a nearest-square divisor when frames touch (Halloween 2, the "w blur" thunder sheets). 101 sheets are written with `cols`/`rows`/`frames` and a `confident` flag. About a third are flagged only because the last cell is empty (harmless); the hit sparks, smears, fire, acid, dark, holy, thunder and ice sheets used first were checked by eye and are right. Anything odd found later: add an override table entry in `prep_arena_assets.py` rather than hand-editing output. The blur and "wo blur" thunder pairs are duplicates (keep wo blur).
+
+**Decisions confirmed.** Player = Fire Knight. Immunitys skeletons/goblins dropped (see section 1). UI = parchment style, which suits a quiet forest-ruins tone. Environments: Forgotten Memories 32x32 for the river/forest/cliff areas (water is 6-frame animated), Resurrected RPG for grass/plants/portal.
+
+**Credits to add before shipping:** chierit (CC BY 4.0), pimen, immunitys (named in the Credits screen).
+
+**Phase 0 exit check:** met. The lab shows every needed character animation, forward and reversed, and the VFX sheets, with correct slicing for the first-use effects.

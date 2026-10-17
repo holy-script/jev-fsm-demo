@@ -10,6 +10,8 @@
     "assets:download": "node tools/itch_download.mjs",
     "assets:duel": "python3 tools/prep_duel_assets.py && python3 tools/make_duel_map.py",
     "assets:download:duel": "node tools/itch_download.mjs duel",
+    "assets:arena": "python3 -I tools/prep_arena_assets.py",
+    "assets:download:arena": "node tools/itch_download.mjs arena",
     "test:duel": "node tests/duel/mechanics.mjs && node tests/duel/jev-gates.mjs && node tests/duel/golem.mjs && node tests/duel/beat.mjs && node tests/duel/skills.mjs && node tests/duel/tutorial.mjs && node tests/duel/grunts.mjs && node tests/duel/world.mjs && node tests/duel/bringer.mjs && node tests/duel/jev2.mjs"
   },
   "dependencies": {

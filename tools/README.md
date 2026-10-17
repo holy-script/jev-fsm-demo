@@ -46,3 +46,11 @@ npm run assets:duel                                # strips + manifest, repacked
 ## Balance harness
 
 `node tests/duel/bot.mjs captain,golem,bringer 2 classic|beat` (needs `npm run dev`): a scripted player at three skill levels (novice, competent, expert) fights each boss against the rules brain and prints win rate, fight length and lowest HP. It is a crude stand-in for a human, so read it as a relative signal. Current shape: the Bringer in beat mode is lost by novices in life 2, reached to life 3 by competent bots and beaten by expert bots.
+
+## v4 ("ARENA") asset tools
+- `node tools/itch_survey.mjs <page-url>...` lists a page's downloads without downloading (no button = needs payment).
+- `node tools/itch_download.mjs arena` downloads the free chierit, pimen and immunitys packs into `assets/_dl4` (`npm run assets:download:arena`).
+- Unpack: `cd assets && mkdir -p packs4 && for f in _dl4/*/*; do n=$(basename "$(dirname "$f")"); b=$(basename "$f"); case "$b" in *.zip|*.rar) d="packs4/$n/${b%.*}"; mkdir -p "$d"; bsdtar -x -f "$f" -C "$d";; *.png) mkdir -p "packs4/$n/png"; cp "$f" "packs4/$n/png/";; esac; done`
+- `python3 -I tools/arena_inventory.py [pack-substring]` prints every animation folder (frames, canvas, bbox).
+- `npm run assets:arena` builds `public/arena-assets/` (gitignored). Inspect with the dev server at `/arena/lab`.
+- Licences: chierit CC BY 4.0 (credit, no resale); pimen credit the author; immunitys edit freely, no redistribution.
