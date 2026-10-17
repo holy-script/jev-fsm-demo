@@ -180,6 +180,8 @@ const CREDITS = [
   "Mecha-Stone Golem: Darkpixel",
   "Tiles and music: pixel-boy - Ninja Adventure (CC0)",
   "Sword sounds: StarNinjas, via OpenGameArt (CC0)",
+  "Hit, impact and shard effects: v-ktor (CC BY 4.0)",
+  "Smoke and heal effects: Pimen",
   "",
   "Boss brain: Jev, by TypeSafe",
   "Built with Phaser and Next.js",

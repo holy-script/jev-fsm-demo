@@ -70,6 +70,7 @@ export class Fighter {
   sprite: Phaser.GameObjects.Sprite;
   private anchors: Record<string, { ax: number; ay: number }> = {};
   private flash = 0;
+  readonly baseScale: number;
 
   constructor(scene: Phaser.Scene, public prefix: string, sheets: DuelManifest["sheets"], public radius: number, scale = 1) {
     const idle = sheets[`${prefix}_idle`];
@@ -79,6 +80,7 @@ export class Fighter {
       if (!key.startsWith(prefix + "_")) continue;
       this.anchors[key] = s.frameH === idle.frameH ? { ax, ay } : { ax: (s.first[0] + s.first[2]) / 2 - 3, ay: s.first[3] };
     }
+    this.baseScale = scale;
     this.sprite = scene.add.sprite(0, 0, `${prefix}_idle`).setScale(scale);
   }
 
@@ -116,9 +118,9 @@ export class Fighter {
   get flashing() {
     return this.flash > 0;
   }
-  hitFlash(ms = 80) {
+  hitFlash(ms = 80, color = 0xffffff) {
     this.flash = ms;
-    this.sprite.setTintFill(0xffffff);
+    this.sprite.setTintFill(color);
   }
   tickFx(dtMs: number) {
     if (this.flash > 0 && (this.flash -= dtMs) <= 0) this.sprite.clearTint();

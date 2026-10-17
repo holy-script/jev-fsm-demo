@@ -28,6 +28,8 @@ npm run assets                           # slices strips + manifest.json, cuts t
 |---|---|---|---|
 | Hero and Opponents | Szadi art | edit and use freely, no resale | hero + Shield Skeleton |
 | Ninja Adventure | pixel-boy | CC0 | cliff tiles, 2 music tracks |
+| Pixelated Attack/Hit Animations | v-ktor | CC BY 4.0 | hit sparks, impact rings, shards, blood (tinted at runtime) |
+| Smoke VFX 1, Cutting and Healing | Pimen | credit the author | dust puffs, heal sparkle |
 | Sword + Sword Clash sounds | StarNinjas (OpenGameArt) | CC0 (credit requested) | recorded sword swings and clashes; everything else in `sfx.ts` is synthesised |
 | Mecha-Stone Golem | Darkpixel | none stated | boss 2 |
 

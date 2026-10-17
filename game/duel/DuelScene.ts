@@ -2,6 +2,7 @@ import * as Phaser from "phaser";
 import { Fighter, World, angleTo, dist, inShape, type DuelManifest } from "./engine";
 import { BOSSES, GAME, GLYPH, HERO, HERO_MOVES, LIGHT_CHAIN, TILE, ZOOM, type AtkType, type BossDef, type GateDef, type HitDef, type MoveDef, type SpawnDef } from "./data";
 import { DIFFICULTY, save, saveGame, settings } from "./settings";
+import { Vfx } from "./vfx";
 import { Telemetry, askGate, askIdle, rulesGate, rulesIdle, type Decision, type DuelSnapshot, type Outcome } from "./brain";
 import { Sfx } from "./sfx";
 
@@ -32,6 +33,7 @@ interface Ring { x: number; y: number; life: number; max: number; color: number;
 const FPS: Record<string, number> = {
   hero_idle: 8, hero_walk: 12, hero_run: 14, hero_block: 8, hero_blockUp: 14, hero_blockHigh: 12, hero_roll: 24, hero_hitA: 12, hero_hitB: 10,
   hero_dead: 8, hero_kick: 16, cap_idle: 6, cap_walk: 8, cap_hit: 12, cap_dead: 7, cap_block: 8, cap_jump: 10,
+  vfx_hit01: 28, vfx_hit03: 28, vfx_hit05: 28, vfx_impact01: 30, vfx_break01: 28, vfx_blood: 22, vfx_shards: 26, vfx_splash: 28, vfx_smoke: 22, vfx_heal: 20,
   golem_idle: 5, golem_glow: 10, golem_arm: 12, golem_block: 12, golem_hit: 10, golem_melee: 12, golem_laser: 10, golem_armor: 10, golem_dead: 8, fx_beam: 14, fx_fist: 14,
 };
 const LOOP = new Set(["hero_idle", "hero_walk", "hero_run", "hero_block", "cap_idle", "cap_walk", "golem_idle"]);
@@ -45,6 +47,8 @@ export class DuelScene extends Phaser.Scene {
   private projs: Proj[] = [];
   private beams: Beam[] = [];
   private sfx!: Sfx;
+  private vfx!: Vfx;
+  private afterAt = 0;
   private player!: Fighter;
   private boss!: Fighter;
   private keys!: Record<string, Phaser.Input.Keyboard.Key>;
@@ -98,6 +102,7 @@ export class DuelScene extends Phaser.Scene {
     this.cameras.main.setBackgroundColor("#0b0d12").setZoom(ZOOM).setBounds(0, 0, map.widthInPixels, map.heightInPixels).setRoundPixels(true);
 
     this.sfx = new Sfx(this, this.man);
+    this.vfx = new Vfx(this);
     this.player = new Fighter(this, "hero", this.man.sheets, HERO.radius, 1);
     this.fx = this.add.graphics().setDepth(40);
     this.glyphText = this.add.text(0, 0, "!", { fontFamily: "monospace", fontSize: "14px", color: "#fff", fontStyle: "bold" }).setOrigin(0.5).setDepth(45).setResolution(2).setVisible(false);
@@ -414,6 +419,10 @@ export class DuelScene extends Phaser.Scene {
         const t = now - p.since;
         const sp = t < HERO.rollMs * 0.8 ? HERO.rollSpeed : HERO.rollSpeed * 0.25;
         f.move(this.world, p.rollDir.x * sp * dt, p.rollDir.y * sp * dt);
+        if (now >= this.afterAt && t < HERO.rollMs * 0.85) {
+          this.afterAt = now + 45;
+          this.vfx.afterimage(f, 0x8fd0ff, 0.35, 230);
+        }
         if (f.done || t > HERO.rollMs + 140) {
           p.rollCd = now + HERO.rollCooldownMs;
           this.setP("free");
@@ -425,9 +434,12 @@ export class DuelScene extends Phaser.Scene {
         if (moving) f.move(this.world, mx * HERO.guardSpeed * 0.5 * dt, my * HERO.guardSpeed * 0.5 * dt);
         f.play("blockUp", 6, { loop: true });
         if (Math.random() < 0.3) this.burst(f.x + Phaser.Math.Between(-8, 8), f.y - 10, 1, 0x6bff9a, 22, 1.6);
+        if (!f.flashing && Math.floor((now - p.since) / 170) % 2 === 1) f.hitFlash(85, 0x6bff9a); // green pulse: no drinking animation, so the body glows instead
         if (now - p.since >= HERO.healMs) {
           p.hp = Math.min(HERO.maxHp, p.hp + HERO.healAmount);
           p.heals--;
+          this.vfx.heal(f.x, f.y - 34);
+          f.hitFlash(160, 0xc8ffd9);
           this.sfx.heal();
           this.ring(f.x, f.y - 24, 0x6bff9a, 22);
           this.setP("free");
@@ -497,6 +509,8 @@ export class DuelScene extends Phaser.Scene {
     this.setP("roll");
     f.play("roll", undefined, { restart: true });
     this.sfx.roll();
+    this.vfx.dust(f.x, f.y - 6);
+    this.afterAt = 0;
   }
 
   private startHeal(now: number) {
@@ -522,6 +536,9 @@ export class DuelScene extends Phaser.Scene {
           this.boss.play(this.def.anims.hit, undefined, { restart: true });
           this.popup(this.boss.x, this.boss.y - this.def.headY - 14, "GUARD BROKEN", "#ffd36b");
           this.sfx.guardBreak();
+          this.vfx.shards(bp.x, bp.y, 0xcfc7b8, 2.2);
+          this.vfx.shock(bp.x, bp.y, 0xffd36b, 1.8);
+          this.vfx.squash(this.boss, 1.2, 0.8, 90);
           this.burst(bp.x, bp.y, 18, 0xcfc7b8, 150, 2.4);
           this.stop(GAME.hitstopHeavy);
           this.cameras.main.shake(160, 0.006);
@@ -531,6 +548,7 @@ export class DuelScene extends Phaser.Scene {
           this.p.lastPostureHit = now;
           this.player.move(this.world, -this.player.face * 8, 0);
           this.sfx.stoneHit();
+          this.vfx.shards(bp.x, bp.y, 0xb8b0a2, 1.0);
           this.burst(bp.x, bp.y, 6, 0xb8b0a2, 80, 1.8);
           this.popup(this.boss.x, this.boss.y - this.def.headY - 14, mv.id === "KICK" ? "NO EFFECT" : "STONE GUARD", "#b8b0a2");
           this.stop(GAME.hitstopLight);
@@ -544,6 +562,8 @@ export class DuelScene extends Phaser.Scene {
         this.boss.play(this.def.anims.hit, undefined, { restart: true });
         this.popup(this.boss.x, this.boss.y - this.def.headY - 14, "GUARD BREAK", "#ffd36b");
         this.sfx.guardBreak();
+        this.vfx.shards(bp.x, bp.y, 0xffd36b, 1.8);
+        this.vfx.shock(bp.x, bp.y, 0xffd36b, 1.4);
         this.burst(bp.x, bp.y, 14, 0xffd36b, 120, 2);
         this.stop(GAME.hitstopHeavy);
         return;
@@ -554,6 +574,7 @@ export class DuelScene extends Phaser.Scene {
       this.p.lastPostureHit = now;
       this.player.move(this.world, -this.player.face * 8, 0);
       this.sfx.block(0.7);
+      this.vfx.blockSplash(bp.x, bp.y, -this.player.face);
       this.burst(bp.x, bp.y, 8, 0xffa94d, 90, 1.8);
       this.stop(GAME.hitstopLight);
       this.checkBossBreak(now);
@@ -565,6 +586,11 @@ export class DuelScene extends Phaser.Scene {
     b.posture = Math.min(100, b.posture + h.posture * (armored ? 0.7 : 1));
     b.lastPostureHit = now;
     this.boss.hitFlash(70);
+    this.vfx.hit(bp.x, bp.y, h.type === "heavy", this.def.noFlinch ? 0xcfc7b8 : 0xffe9c2);
+    if (this.def.noFlinch) {
+      this.vfx.squash(this.boss, 1.06, 0.95, 60); // no hurt animation: the body gives a little
+      if (h.type === "heavy") this.vfx.shards(bp.x, bp.y, 0xb8b0a2, 1.4);
+    }
     this.burst(bp.x, bp.y, h.type === "heavy" ? 14 : 9, 0xffe9c2, h.type === "heavy" ? 140 : 100, 2);
     this.sfx.hit(h.type === "heavy");
     this.stop(h.type === "heavy" ? GAME.hitstopHeavy : GAME.hitstopLight);
@@ -593,6 +619,8 @@ export class DuelScene extends Phaser.Scene {
     this.boss.play(this.def.anims.hit, 6, { restart: true });
     this.popup(this.boss.x, this.boss.y - this.def.headY - 14, "POSTURE BROKEN", "#ffd36b");
     this.sfx.postureBreak();
+    this.vfx.postureBreak(this.boss.x, this.boss.y - this.def.headY * 0.55);
+    this.vfx.squash(this.boss, 1.18, 0.84, 110);
     this.ring(this.boss.x, this.boss.y - this.def.headY * 0.45, 0xffd36b, 34);
     this.stop(170);
     this.cameras.main.shake(180, 0.006);
@@ -613,6 +641,7 @@ export class DuelScene extends Phaser.Scene {
   private deathblow(now: number) {
     const b = this.b;
     this.sfx.deathblow();
+    this.vfx.deathblow(this.boss.x, this.boss.y - this.def.headY * 0.5);
     this.stop(260);
     this.cameras.main.flash(180, 255, 240, 200);
     this.cameras.main.shake(260, 0.01);
@@ -937,6 +966,7 @@ export class DuelScene extends Phaser.Scene {
       this.burst(this.boss.x, this.boss.y - this.def.headY * 0.45, 20, 0x9fe8ff, 120, 2.2);
       this.popup(this.boss.x, this.boss.y - this.def.headY - 14, "ARMORED", "#9fe8ff");
       this.sfx.buff();
+      this.vfx.shock(this.boss.x, this.boss.y - this.def.headY * 0.45, 0x9fe8ff, 2.4);
       this.stop(90);
     }
   }
@@ -973,6 +1003,7 @@ export class DuelScene extends Phaser.Scene {
           b.posture = Math.min(100, b.posture + pr.defl);
           b.lastPostureHit = now;
           this.boss.hitFlash(90);
+          this.vfx.deflect(this.boss.x, this.boss.y - this.def.headY * 0.45);
           this.sfx.hit(true);
           this.popup(this.boss.x, this.boss.y - this.def.headY - 14, "REFLECTED", "#fff2b0");
           this.stop(GAME.hitstopHeavy);
@@ -1148,7 +1179,14 @@ export class DuelScene extends Phaser.Scene {
     }
     for (const l of mv.lunge ?? []) if (!holding && fr >= l.frames[0] && fr <= l.frames[1]) {
       const near = dist(f.x, f.y, this.player.x, this.player.y) > this.def.radius + HERO.radius + 8;
-      if (near) f.move(this.world, Math.cos(b.atkDir) * l.speed * dt, Math.sin(b.atkDir) * l.speed * dt);
+      if (near) {
+        f.move(this.world, Math.cos(b.atkDir) * l.speed * dt, Math.sin(b.atkDir) * l.speed * dt);
+        if (now >= this.afterAt) {
+          this.afterAt = now + 60;
+          const tcol = b.glyph ? GLYPH[b.glyph.type]?.color ?? 0xffffff : 0xffffff;
+          this.vfx.afterimage(f, tcol, 0.3, 220);
+        }
+      }
     }
 
     if (!holding) this.runMoveEffects(mv, fr, now);
@@ -1230,6 +1268,8 @@ export class DuelScene extends Phaser.Scene {
     b.glyph = null;
     this.popup(this.boss.x, this.boss.y - this.def.headY - 14, "SLIP", "#ff8a8a");
     this.sfx.slip();
+    this.vfx.shock(this.boss.x, this.boss.y - this.def.headY * 0.45, 0xff8a8a, 1.6);
+    this.vfx.hit(this.boss.x, this.boss.y - this.def.headY * 0.45, true, 0xff8a8a);
     this.ring(this.boss.x, this.boss.y - this.def.headY * 0.45, 0xff8a8a, 30);
     this.stop(130);
     this.checkBossBreak(now);
@@ -1246,6 +1286,8 @@ export class DuelScene extends Phaser.Scene {
       b.posture = Math.min(100, b.posture + h.deflectPosture);
       b.lastPostureHit = now;
       this.sfx.deflect();
+      this.vfx.deflect(cp.x + f.face * 10, cp.y);
+      f.hitFlash(70, 0xffffff);
       this.burst(cp.x + f.face * 10, cp.y, 22, 0xfff2b0, 170, 2.2);
       this.ring(cp.x + f.face * 10, cp.y, 0xffffff, 28);
       this.popup(f.x, f.y - 74, "DEFLECT", "#fff2b0");
@@ -1262,6 +1304,8 @@ export class DuelScene extends Phaser.Scene {
       p.posture += h.posture;
       p.lastPostureHit = now;
       this.sfx.block(1);
+      this.vfx.blockSplash(cp.x + f.face * 12, cp.y, f.face);
+      f.hitFlash(60, 0x9fd0ff);
       this.burst(cp.x + f.face * 10, cp.y, 10, 0xffa94d, 110, 1.8);
       this.stop(GAME.hitstopLight);
       f.move(this.world, Math.cos(away) * 14, Math.sin(away) * 14);
@@ -1276,6 +1320,9 @@ export class DuelScene extends Phaser.Scene {
     p.posture += h.posture * 0.4;
     p.lastPostureHit = now;
     this.sfx.hurt();
+    f.hitFlash(150, 0xff3b3b); // no dedicated hurt flash in the art: red body flash
+    this.vfx.blood(cp.x, cp.y, -f.face);
+    this.vfx.hit(cp.x, cp.y, kind === "grab", 0xff8a8a);
     this.burst(cp.x, cp.y, 12, 0xff4d4d, 130, 2);
     this.stop(kind === "grab" ? 200 : GAME.hitstopHeavy);
     this.cameras.main.shake(180, kind === "grab" ? 0.01 : 0.006);
@@ -1293,6 +1340,7 @@ export class DuelScene extends Phaser.Scene {
     this.player.play("hitB", 4, { restart: true });
     this.popup(this.player.x, this.player.y - 74, "POSTURE BROKEN", "#ffd36b");
     this.sfx.postureBreak();
+    this.vfx.postureBreak(this.player.x, this.player.y - 38);
     this.cameras.main.shake(200, 0.008);
     this.p.invulnUntil = now + 300;
   }

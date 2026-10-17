@@ -106,6 +106,37 @@ for i in range(6):
 fist.save(os.path.join(OUT, "fx", "fist.png"))
 manifest["sheets"]["fx_fist"] = {"file": "duel-assets/fx/fist.png", "frameW": 100, "frameH": 100, "frames": 6, "bbox": [60, 30, 95, 44], "first": [60, 30, 95, 44]}
 
+# ---- VFX (all white-on-transparent except the heal sparkle, so they can be tinted at runtime)
+#   v-ktor "Pixelated Attack/Hit Animations" (CC-BY 4.0), Pimen "Smoke VFX 1" and "Cutting and Healing" (credit Pimen).
+def find_file(pack, name):
+    for root, _, fs in os.walk(os.path.join(P3, pack)):
+        if name in fs:
+            return os.path.join(root, name)
+    sys.exit(f"missing {name} in packs3/{pack} - download the VFX packs (see tools/README.md)")
+
+def vfx_strip(key, pack, name, fw, fh, cols, n):
+    img = Image.open(find_file(pack, name)).convert("RGBA")
+    frames = [img.crop(((i % cols) * fw, (i // cols) * fh, (i % cols) * fw + fw, (i // cols) * fh + fh)) for i in range(n)]
+    out = Image.new("RGBA", (fw * n, fh))
+    for i, f in enumerate(frames):
+        out.paste(f, (i * fw, 0))
+    os.makedirs(os.path.join(OUT, "vfx"), exist_ok=True)
+    out.save(os.path.join(OUT, "vfx", key + ".png"))
+    manifest["sheets"]["vfx_" + key] = {"file": f"duel-assets/vfx/{key}.png", "frameW": fw, "frameH": fh, "frames": n, "bbox": [0, 0, fw, fh], "first": [0, 0, fw, fh]}
+
+P3 = os.path.join(ROOT, "assets", "packs3")
+VK = "pixelated-attackhit-animations"
+vfx_strip("hit01", VK, "hit01.png", 64, 64, 5, 10)      # streaks
+vfx_strip("hit03", VK, "hit03.png", 64, 64, 5, 10)      # starburst
+vfx_strip("hit05", VK, "hit05.png", 64, 64, 5, 10)      # curved slash arcs
+vfx_strip("impact01", VK, "impact01.png", 64, 64, 11, 11)  # growing shock ring
+vfx_strip("break01", VK, "break01.png", 64, 64, 11, 11)    # X burst
+vfx_strip("blood", VK, "blood.png", 64, 64, 8, 8)
+vfx_strip("shards", VK, "shards01.png", 64, 64, 5, 10)
+vfx_strip("splash", VK, "splash01.png", 64, 64, 5, 10)
+vfx_strip("smoke", "smoke-vfx-1", "Smoke VFX 2.png", 64, 64, 13, 13)
+vfx_strip("heal", "cutting-and-healing", "Heal Effect Sprite Sheet.png", 128, 128, 4, 16)
+
 # ---- tileset: Ninja Adventure TilesetRelief (orange): plateau 4x3 + cliff face 3x3 -> 7x3
 relief = Image.open(os.path.join(NA, "Backgrounds", "Tilesets", "TilesetRelief.png")).convert("RGBA")
 tiles = Image.new("RGBA", (7 * 16, 3 * 16))
