@@ -155,6 +155,7 @@ export interface Decision {
   choice: string;
   probabilities?: Record<string, number>;
   reads?: Reads;
+  rhythm?: string; // beat mode: ON_BEAT | OFF_BEAT | QUICK | SLOW, how the chosen move is timed against the music
   taunt?: string; // id of the authored line Jev chose to have the boss speak (NONE = silence)
   latencyMs: number;
   source: "jev" | "rules" | "fallback";
@@ -172,6 +173,7 @@ Rules you must reason with:
 - A player who always answers the same way (always rolls, always deflects, always attacks first) can be punished by the move that beats that answer.
 - When snapshot.timing.mode is "beat", the fight is choreographed to a musical beat (timing.beatMs per beat): your attacks land ON the beat, and a DELAY lands half a beat OFF it. A player who taps guard on the beat deflects on-beat attacks easily but is beaten by off-beat ones.
 - snapshot.habits tells you how this player rolls (toward, away or sideways relative to you), how early they tap guard before an impact (guardTapLeadMs: a large number means they tap early, so a delayed swing beats them), whether they heal in safe moments or mid-attack, and whether they punish your recovery or attack greedily into your wind-ups. snapshot.memory, when present, is what you learned in earlier attempts against this player: use it from the very first move (open with what beat them last time).
+- In beat mode you also choose a RHYTHM for each move (see the rhythm question): on the beat, half a beat late, quick, or slow. Choose it from the player's guard-tap lead and habits.
 - snapshot.fairness: you may not throw a third unblockable move in a row; when unblockablesCapped is true those moves are simply not on offer.
 Play to win but stay unpredictable: do not repeat the same action over and over, and adapt to the habits shown in the data.`;
 
@@ -209,6 +211,16 @@ export function idleQuestions(def: BossDef, available: string[], withReads = tru
       criteria: ["erratic, no pattern", "slight tendencies", "a clear pattern", "highly predictable, answers the same way every time"],
     },
   });
+  if (withReads) questions.rhythm = {
+    type: "choice",
+    instructions: `Choreography: when snapshot.timing.mode is "beat", also choose how the move you picked is TIMED against the music (it has no effect in classic mode). Players learn the rhythm: a player who keeps deflecting on the beat should be answered with OFF_BEAT or SLOW; a player who is stalling or tapping guard early should meet QUICK or OFF_BEAT; vary it so it never becomes a pattern. Use ON_BEAT when nothing argues otherwise.`,
+    criteria: {
+      ON_BEAT: "The impact lands exactly on a beat, as the dance is written. Fair and readable.",
+      OFF_BEAT: "The impact lands half a beat LATE, between beats. Beats players who time their guard tap to the music.",
+      QUICK: "The wind-up is as short as the animation allows: the impact lands a beat sooner than usual. Beats players who wait for a slow tell.",
+      SLOW: "A long, held wind-up: the impact lands a full beat LATER than usual. Beats players who tap guard early out of impatience.",
+    },
+  };
   if (def.taunts?.length) {
     const tc: Record<string, string> = { NONE: "Say nothing. Silence is the default; most of the time this is right." };
     for (const t of def.taunts) tc[t.id] = `Say: "${t.text}". Use when: ${t.when}`;
@@ -258,7 +270,7 @@ export async function askIdle(def: BossDef, snap: DuelSnapshot, available: strin
   const a = await ask(snap, idleQuestions(def, available) as Record<string, unknown>);
   const r = a.next_action;
   if (!r?.choice || !available.includes(r.choice)) throw new Error(`Jev picked an unavailable action: ${r?.choice}`);
-  return { kind: "idle", label, choice: r.choice, probabilities: r.probabilities, reads: readsFrom(a), taunt: a.taunt?.choice, latencyMs: Math.round(performance.now() - t0), source: "jev" };
+  return { kind: "idle", label, choice: r.choice, probabilities: r.probabilities, reads: readsFrom(a), rhythm: a.rhythm?.choice, taunt: a.taunt?.choice, latencyMs: Math.round(performance.now() - t0), source: "jev" };
 }
 
 export async function askGate(def: BossDef, move: MoveDef, gate: GateDef, snap: DuelSnapshot, phase: 1 | 2, label: string): Promise<Decision> {

@@ -41,19 +41,30 @@ export interface BossMemory {
   deflects: number;
   deflectLeadMs: number; // running average of how long before impact the player taps guard
 }
+export interface RunRecord {
+  boss: string;
+  brain: "JEV" | "RULES";
+  won: boolean; // the player beat the boss
+  secs: number;
+  thrown: number; // boss attacks thrown
+  hit: number; // ... that landed
+  deflected: number;
+  dodged: number;
+}
 export interface SaveData {
   cleared: string[]; // boss ids defeated
   deaths: number;
   skills: string[]; // unlocked skill ids
   points: number; // unspent skill points
   tutorialDone: boolean;
+  runs: RunRecord[]; // recent boss fights, for the Jev-vs-Rules stats screen
   memory: Record<string, BossMemory>; // what each boss has learned about you across attempts
   seen: string[]; // story lines already shown (intros, outros, briefings), so retries do not replay them
 }
-const FRESH: SaveData = { cleared: [], deaths: 0, skills: [], points: 2, tutorialDone: false, seen: [], memory: {} };
+const FRESH: SaveData = { cleared: [], deaths: 0, skills: [], points: 2, tutorialDone: false, seen: [], memory: {}, runs: [] };
 export const save: SaveData = read("duel.save", { ...FRESH });
 export const saveGame = () => write("duel.save", save);
 export const resetSave = () => {
-  Object.assign(save, { ...FRESH, cleared: [], skills: [], seen: [], memory: {} });
+  Object.assign(save, { ...FRESH, cleared: [], skills: [], seen: [], memory: {}, runs: [] });
   saveGame();
 };

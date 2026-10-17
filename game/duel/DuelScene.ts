@@ -313,6 +313,7 @@ export class DuelScene extends Phaser.Scene {
   private wake() {
     if (this.b.awake) return;
     this.b.awake = true;
+    this.fightT0 = this.time.now;
     this.card = null;
     this.world.gateOpen = false;
     this.locked = true;
@@ -1324,6 +1325,7 @@ export class DuelScene extends Phaser.Scene {
     return Math.min(...fs);
   }
   private pendingNext = false;
+  private fightT0 = 0;
   /** After a boss: the shrine (spend skill points), then the next guardian. The scripted tests skip the screen (?dev=1). */
   private openShrine() {
     if (this.p.mode === "dead") return;
@@ -1382,7 +1384,8 @@ export class DuelScene extends Phaser.Scene {
    * Choreographed timing: stretch each telegraph hold so the impact that follows it lands on the beat grid.
    * Returns the hold length in ms for every hold of the move.
    */
-  private planHolds(mv: MoveDef, now: number): number[] {
+  private rhythmNow: string | null = null; // chosen by Jev with the move; consumed by forceMove
+  private planHolds(mv: MoveDef, now: number, rhythm: string | null = null): number[] {
     const holds = mv.holds ?? [];
     const m = this.mul(), bm = this.beatMs(), grid = mv.grid ?? 1;
     const fdur = 1000 / (mv.fps * m.fps);
@@ -1401,7 +1404,8 @@ export class DuelScene extends Phaser.Scene {
       const natural = t + (next - h.frame) * fdur;
       const lead = i === 0 ? Math.max(1, (mv.leadBeats ?? 1.5) - (this.phase() === 2 ? 0.5 : 0)) : mv.gapBeats?.[i - 1] ?? 1;
       const ref = i === 0 ? 0 : prevImpact;
-      let target = Math.ceil((b0 + ref / bm + lead) / grid - 1e-6) * grid; // beat position
+      const lead2 = i === 0 ? Math.max(1, lead + (rhythm === "SLOW" ? 1 : rhythm === "QUICK" ? -1 : 0)) : lead;
+      let target = Math.ceil((b0 + ref / bm + lead2) / grid - 1e-6) * grid + (rhythm === "OFF_BEAT" ? 0.5 : 0); // beat position
       let tTarget = (target - b0) * bm;
       while (tTarget < natural + 90) tTarget += grid * bm; // never shorter than the animation allows
       const holdMs = tTarget - natural;
@@ -1559,6 +1563,10 @@ export class DuelScene extends Phaser.Scene {
   }
   private remember(won: boolean) {
     if (this.def.training || this.def.kind === "grunt") return;
+    let thrown = 0, hit = 0, deflected = 0, dodged = 0;
+    for (const s of Object.values(this.tel.vsMove)) { thrown += s.thrown; hit += s.hit; deflected += s.deflected; dodged += s.dodged + s.slipped; }
+    (save.runs ??= []).push({ boss: this.def.id, brain: this.hud.brain, won, secs: Math.round((this.time.now - this.fightT0) / 1000), thrown, hit, deflected, dodged });
+    if (save.runs.length > 60) save.runs.shift();
     const m = this.memoryOf();
     m.attempts++;
     if (won) m.wins++;
@@ -1672,6 +1680,7 @@ export class DuelScene extends Phaser.Scene {
         b.decision = null;
         return this.execAction(r.choice, now);
       }
+      this.rhythmNow = d.rhythm ?? null;
       return this.execAction(d.choice, now);
     }
     if (b.asking && now - b.askedAt > ASK_TIMEOUT) {
@@ -1738,7 +1747,10 @@ export class DuelScene extends Phaser.Scene {
     b.buffed = false;
     b.gates = (mv.gates ?? []).map((def) => ({ def, requested: false, asking: false, ans: null, applied: false }));
     b.moveToken++;
-    b.plan = this.beatMode() ? this.planHolds(mv, now) : null;
+    const rh = this.rhythmNow;
+    this.rhythmNow = null;
+    b.plan = this.beatMode() ? this.planHolds(mv, now, rh) : null;
+    if (rh && rh !== "ON_BEAT" && this.beatMode()) this.popup(this.boss.x, this.boss.y - this.def.headY - 26, rh.replace("_", "-"), "#ffd9a0");
     b.endSince = 0;
     b.held = false;
     b.holdIdx = 0;

@@ -49,4 +49,16 @@ check("the request carries habits and fairness state", idleReq?.state?.habits !=
 const cd = await p.evaluate(() => { const d = window.__duel; d.speak("T_GUARD", d.time.now); return d.tauntText?.text; });
 check("a taunt cooldown keeps the boss from speaking again straight away", cd === "You roll like a leaf. I am the wind.", { cd });
 
+// --- rhythm
+const rh = await p.evaluate(() => { const d = window.__duel; d.reset(d.idxOf("bringer")); d.beatMode = () => true; d.sfx.beatPos = () => 0.3; const mv = d.def.moves.SCYTHE; const bm = d.beatMs();
+  const f = (r) => d.planHolds(mv, d.time.now, r)[0];
+  return { bm, on: f("ON_BEAT"), off: f("OFF_BEAT"), quick: f("QUICK"), slow: f("SLOW") }; });
+const dOff = ((rh.off - rh.on) % rh.bm + rh.bm) % rh.bm;
+check("rhythm: OFF_BEAT lands half a beat after ON_BEAT, SLOW a beat later, QUICK no later", Math.abs(dOff - rh.bm / 2) < 8 && Math.abs(rh.slow - rh.on - rh.bm) < 8 && rh.quick <= rh.on + 1, rh);
+check("the idle request offers the rhythm question with all four timings", JSON.stringify(Object.keys(reqs.find((r) => r.questions.next_action)?.questions.rhythm?.criteria ?? {})) === JSON.stringify(["ON_BEAT", "OFF_BEAT", "QUICK", "SLOW"]), {});
+
+// --- run records for the stats screen
+const runs = await p.evaluate(() => { const d = window.__duel; d.reset(d.idxOf("bringer")); d.tel.attackStart("SCYTHE", 0, 50); d.tel.outcome("SCYTHE", "hit"); d.tel.attackStart("SCYTHE", 0, 50); d.tel.outcome("SCYTHE", "deflected"); d.hud.brain = "RULES"; d.remember(true); return JSON.parse(localStorage.getItem("duel.save")).runs.slice(-1)[0]; });
+check("a finished boss fight is recorded with its brain and how the player fared", runs.brain === "RULES" && runs.won === true && runs.thrown === 2 && runs.hit === 1 && runs.deflected === 1, runs);
+
 console.log(errs.join("\n") || "no page errors"); console.log(`${results.filter(Boolean).length}/${results.length} passed`); await b.close();

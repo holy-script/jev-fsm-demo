@@ -15,7 +15,7 @@ const cycle = <T,>(arr: readonly T[], cur: T, dir: number) => arr[(arr.indexOf(c
 /** Title screen and pause menu (one scene, two modes). */
 export class MenuScene extends Phaser.Scene {
   private mode: "title" | "pause" = "title";
-  private screen: "main" | "settings" | "credits" = "main";
+  private screen: "main" | "settings" | "credits" | "stats" = "main";
   private items: Item[] = [];
   private texts: Phaser.GameObjects.Text[] = [];
   private hint!: Phaser.GameObjects.Text;
@@ -106,6 +106,7 @@ export class MenuScene extends Phaser.Scene {
             { label: () => "Continue", enabled: () => save.cleared.length > 0 || save.tutorialDone, act: () => this.startGame(), hint: () => save.cleared.length ? `${save.cleared.length} foe(s) defeated` : "The tutorial is done: onward to the Hall." },
             { label: () => "New Game", act: () => { resetSave(); this.startGame(); } },
             { label: () => "Settings", act: () => { this.screen = "settings"; this.idx = 0; this.build(); } },
+            { label: () => "Jev vs Rules", act: () => { this.screen = "stats"; this.idx = 0; this.build(); }, hint: () => "How the Jev brain compares with the plain rules bot, from your recent boss fights." },
             { label: () => "Credits", act: () => { this.screen = "credits"; this.idx = 0; this.build(); } },
           ]
         : [
@@ -113,6 +114,7 @@ export class MenuScene extends Phaser.Scene {
             { label: () => "Skip tutorial", enabled: () => !!(this.scene.get("duel") as unknown as { isTutorial?: () => boolean }).isTutorial?.(), act: () => { (this.scene.get("duel") as unknown as { skipTutorial: () => void }).skipTutorial(); this.resume(); } },
             { label: () => "Skills (shrine)", act: () => { this.scene.setVisible(false); this.scene.launch("skills", { from: "menu" }); this.scene.pause(); } },
             { label: () => "Settings", act: () => { this.screen = "settings"; this.idx = 0; this.build(); } },
+            { label: () => "Jev vs Rules", act: () => { this.screen = "stats"; this.idx = 0; this.build(); } },
             { label: () => "Quit to title", act: () => this.quitToTitle() },
           ];
       if (title && !(save.cleared.length || save.tutorialDone)) this.idx = 1;
@@ -137,6 +139,10 @@ export class MenuScene extends Phaser.Scene {
         },
         { label: () => "Back", act: () => this.back() },
       ];
+    } else if (this.screen === "stats") {
+      this.heading.setText("JEV VS RULES").setFontSize(52);
+      this.sub.setText("your recent boss fights, by which brain ran the boss");
+      this.items = [{ label: () => "Back", act: () => this.back() }];
     } else {
       this.heading.setText("CREDITS").setFontSize(52);
       this.sub.setText("");
@@ -151,6 +157,10 @@ export class MenuScene extends Phaser.Scene {
     if (this.screen === "credits") {
       this.texts.push(this.add.text(VIEW_W / 2, 330, CREDITS, { fontFamily: "monospace", fontSize: "15px", color: "#cfc7b4", align: "center", lineSpacing: 6, stroke: "#000", strokeThickness: 3 }).setOrigin(0.5, 0));
       this.items[0] && this.texts[0].setY(VIEW_H - 120);
+    }
+    if (this.screen === "stats") {
+      this.texts.push(this.add.text(VIEW_W / 2, 230, statsText(), { fontFamily: "monospace", fontSize: "17px", color: "#cfc7b4", align: "center", lineSpacing: 8, stroke: "#000", strokeThickness: 3 }).setOrigin(0.5, 0));
+      this.texts[0].setY(VIEW_H - 120);
     }
     this.refresh();
   }
@@ -179,9 +189,25 @@ export class MenuScene extends Phaser.Scene {
   }
 }
 
+/** Per brain: fights, how often the player won, and how the player fared against its attacks. Lower "answered" = the brain is harder to read. */
+function statsText() {
+  const runs = save.runs ?? [];
+  if (!runs.length) return "No boss fights recorded yet.\nFight a boss, then toggle the brain with F to compare.";
+  const line = (brain: "JEV" | "RULES") => {
+    const r = runs.filter((x) => x.brain === brain);
+    if (!r.length) return `${brain.padEnd(6)}  no fights yet`;
+    const sum = (k: "thrown" | "hit" | "deflected" | "dodged" | "secs") => r.reduce((a, x) => a + x[k], 0);
+    const thrown = Math.max(1, sum("thrown")), wins = r.filter((x) => x.won).length, mins = Math.max(0.1, sum("secs") / 60);
+    const pct = (n: number) => `${Math.round((n / thrown) * 100)}%`;
+    return `${brain.padEnd(6)}  ${r.length} fights   you won ${wins}   hit you ${pct(sum("hit"))} of attacks   you deflected ${pct(sum("deflected"))}   dodged ${pct(sum("dodged"))}   ${Math.round(sum("hit") / mins * 10) / 10} hits/min`;
+  };
+  return [line("JEV"), line("RULES"), "", "More hits on you and fewer deflects means the brain reads you better."].join("\n");
+}
+
 const CREDITS = [
   "Hero, Shield Skeleton: Szadi art - Hero and Opponents",
   "Mecha-Stone Golem: Darkpixel",
+  "Bringer of Death: Clembod",
   "Tiles and music: pixel-boy - Ninja Adventure (CC0)",
   "Sword sounds: StarNinjas, via OpenGameArt (CC0)",
   "Hit, impact and shard effects: v-ktor (CC BY 4.0)",
