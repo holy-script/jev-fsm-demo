@@ -211,6 +211,24 @@ if rr_dir and os.path.exists(os.path.join(rr_dir, "portal-Sheet.png")):
     pim.save(os.path.join(OUT, "vfx", "env_portal.png"))
     man["vfx"]["env_portal"] = info(pframes, "vfx/env_portal.png", pw, pim.size[1], {"auto": False, "confident": True, "pack": "resurected-rpg-tile", "cols": 32, "rows": 1})
 
+# ---------------------------------------------------------------- audio: reuse the v3 build's converted sword samples and beat-analysed music
+# (public/duel-assets from `npm run assets:duel`: CC0 StarNinjas swords + Ninja Adventure music). Without it the game is silent, nothing breaks.
+DUEL = os.path.join(ROOT, "public", "duel-assets")
+dm = os.path.join(DUEL, "manifest.json")
+if os.path.exists(dm):
+    d = json.load(open(dm))
+    os.makedirs(os.path.join(OUT, "audio"), exist_ok=True)
+    man["audio"], man["music"] = {}, {}
+    for k, f in d.get("audio", {}).items():
+        shutil.copy(os.path.join(ROOT, "public", f), os.path.join(OUT, "audio", os.path.basename(f)))
+        man["audio"][k] = "arena-assets/audio/" + os.path.basename(f)
+    for k, m in d.get("music", {}).items():
+        shutil.copy(os.path.join(ROOT, "public", m["file"]), os.path.join(OUT, "audio", os.path.basename(m["file"])))
+        man["music"][k] = {**m, "file": "arena-assets/audio/" + os.path.basename(m["file"])}
+    print(f"audio: {len(man['audio'])} samples, {len(man['music'])} tracks")
+else:
+    print("note: public/duel-assets not built (npm run assets:duel): ARENA will have synthesised sound effects only, no samples or music")
+
 json.dump(man, open(os.path.join(OUT, "manifest.json"), "w"), indent=1)
 print(f"{len(man['sheets'])} character strips, {len(man['vfx'])} vfx sheets, {sum(len(v) for v in man['raw'].values())} raw images")
 for k, v in man["vfx"].items():

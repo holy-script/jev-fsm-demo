@@ -32,6 +32,8 @@ export interface AreaDef {
   ambient: { color: number; alpha: number };
   vignette: number;
   particles: "leaves" | "motes" | "mist" | "embers";
+  /** music key from the manifest (Ninja Adventure tracks): beat-analysed, 65-90 BPM */
+  music: string;
   portal?: { x: number; y: number; scale: number };
 }
 
@@ -53,7 +55,7 @@ export const AREAS: Record<string, AreaDef> = {
       { k: "fmp_40", x: 35, y: 530 }, { k: "fmp_29", x: 600, y: 535 },
     ],
     obstacles: [{ x: 790, y: 440, r: 18 }, { x: 175, y: 450, r: 22 }],
-    ambient: { color: 0xffd9a8, alpha: 0.14 }, vignette: 0.35, particles: "leaves",
+    ambient: { color: 0xffd9a8, alpha: 0.14 }, vignette: 0.35, particles: "leaves", music: "captain",
   },
   river: {
     id: "river", name: "RIVER SHRINE", subtitle: "The water remembers every blade.",
@@ -69,7 +71,7 @@ export const AREAS: Record<string, AreaDef> = {
       { k: "fmp_35", x: 250, y: 470 }, { k: "fmp_35", x: 760, y: 420 },
     ],
     obstacles: [{ x: 95, y: 275, r: 20 }, { x: 865, y: 275, r: 20 }, { x: 230, y: 292, r: 12 }, { x: 730, y: 295, r: 12 }, { x: 480, y: 262, r: 12 }, { x: 250, y: 470, r: 12 }, { x: 760, y: 420, r: 12 }],
-    ambient: { color: 0xa9c8ff, alpha: 0.3 }, vignette: 0.42, particles: "mist",
+    ambient: { color: 0xa9c8ff, alpha: 0.3 }, vignette: 0.42, particles: "mist", music: "temple",
   },
   ruins: {
     id: "ruins", name: "SUNKEN RUINS", subtitle: "What the wind has not buried, it guards.",
@@ -84,7 +86,7 @@ export const AREAS: Record<string, AreaDef> = {
       { k: "fmp_15", x: 480, y: 520 }, { k: "fmp_14", x: 230, y: 520 },
     ],
     obstacles: [{ x: 190, y: 300, r: 22 }, { x: 770, y: 300, r: 22 }, { x: 330, y: 450, r: 14 }, { x: 640, y: 420, r: 14 }, { x: 120, y: 480, r: 18 }, { x: 860, y: 500, r: 18 }],
-    ambient: { color: 0x6677b5, alpha: 0.5 }, vignette: 0.6, particles: "mist",
+    ambient: { color: 0x6677b5, alpha: 0.5 }, vignette: 0.6, particles: "mist", music: "crypt",
   },
   gate: {
     id: "gate", name: "ECHO'S GATE", subtitle: "You have been here before.",
@@ -99,7 +101,7 @@ export const AREAS: Record<string, AreaDef> = {
       { k: "rrp_17", x: 300, y: 500 }, { k: "rrp_15", x: 680, y: 495 },
     ],
     obstacles: [{ x: 175, y: 300, r: 22 }, { x: 785, y: 300, r: 22 }, { x: 90, y: 285, r: 12 }, { x: 870, y: 285, r: 12 }, { x: 300, y: 500, r: 16 }, { x: 680, y: 495, r: 16 }],
-    ambient: { color: 0x7254e8, alpha: 0.46 }, vignette: 0.6, particles: "motes",
+    ambient: { color: 0x7254e8, alpha: 0.46 }, vignette: 0.6, particles: "motes", music: "final",
     portal: { x: 480, y: 168, scale: 2.1 },
   },
 };

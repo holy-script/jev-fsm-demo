@@ -31,6 +31,8 @@ class BootScene extends Phaser.Scene {
     for (const [key, s] of Object.entries(m.sheets)) this.load.spritesheet(key, "/" + s.file, { frameWidth: s.frameW, frameHeight: s.frameH });
     for (const [key, s] of Object.entries(m.vfx)) this.load.spritesheet(key, "/" + s.file, { frameWidth: s.frameW, frameHeight: s.frameH });
     for (const [key, e] of Object.entries(m.env)) this.load.image(key, "/" + e.file);
+    for (const [k, f] of Object.entries(m.audio ?? {})) this.load.audio(k, "/" + f);
+    for (const [k, mu] of Object.entries(m.music ?? {})) this.load.audio("music_" + k, "/" + mu.file);
     this.registry.set("manifest", m);
     this.registry.set("hooks", this.hooks);
     this.load.once("complete", () => this.scene.start("arena"));

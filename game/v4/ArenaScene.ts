@@ -9,6 +9,7 @@ import { AreaView } from "./world";
 import { BOSSES, ENCOUNTERS, GENERIC_ACTIONS, type BossDef } from "./bosses";
 import { BossBrain, Telemetry, type Decision, type Snapshot } from "./brain";
 import { Fighter } from "./fighter";
+import { Sfx } from "./sfx";
 import { GameInput, type InputFrame } from "./input";
 import { loadMemory, memoryFor, profile, remember, saveMemory, type MemoryStore } from "./memory";
 import { MashRun, QteRun, type DeathblowGrade } from "./qte";
@@ -66,6 +67,7 @@ export class ArenaScene extends Phaser.Scene {
   area?: AreaView;
   private hud!: Phaser.GameObjects.Graphics;
   private texts: Record<string, Phaser.GameObjects.Text> = {};
+  sfx!: Sfx;
   inp!: GameInput;
   frame!: InputFrame;
   private manifest!: ArenaManifest;
@@ -94,6 +96,7 @@ export class ArenaScene extends Phaser.Scene {
     this.brain = new BossBrain({ onDecision: (d) => this.onDecision(d) });
     this.player = new Fighter(this, "fk", this.manifest.sheets, HERO.radius);
     this.boss = BOSSES[new URLSearchParams(window.location.search).get("boss") ?? "mb"] ?? BOSSES.mb;
+    this.sfx = new Sfx(this, this.manifest, () => this.settings);
     this.buildArea();
     this.enemy = this.makeEnemy();
     this.hud = this.add.graphics().setDepth(2000);
@@ -334,6 +337,7 @@ export class ArenaScene extends Phaser.Scene {
       this.telemetry.rollDir((p.rollDir.x * ex + p.rollDir.y * ey) / m);
     }
     this.player.play(HERO_CLIPS.roll);
+    this.sfx.roll();
     this.note("roll");
   }
 
@@ -377,6 +381,8 @@ export class ArenaScene extends Phaser.Scene {
         });
       },
     });
+    if (skill) this.sfx.skill();
+    else this.sfx.swing(id === "L3");
     this.note("attack", { id, chain: p.chain });
   }
 
@@ -415,6 +421,7 @@ export class ArenaScene extends Phaser.Scene {
     const mid = { x: (this.player.x + this.enemy.x) / 2, y: this.enemy.y - 45 * SCALE * 0.6 };
     this.vfx.play(FX.sparkHit, this.enemy.x - this.player.face * 6, mid.y, { flip: this.player.face < 0, scale: broken ? 1.8 : 1.2 });
     this.enemy.hitFlash(80);
+    this.sfx.hit(h.kind === "heavy" || broken);
     this.hitstop = Math.max(this.hitstop, h.kind === "heavy" || broken ? 110 : 55);
     this.popup(this.enemy.x, this.enemy.y - 130, broken ? "DEATHBLOW " + dmg : String(dmg), broken ? "#ff5d5d" : "#ffd166");
     this.shake(h.kind === "heavy" || broken ? 0.006 : 0.002, 90);
@@ -468,6 +475,7 @@ export class ArenaScene extends Phaser.Scene {
     const pi = Math.max(0, a.hits.findIndex((h) => h.kind === "perilous"));
     for (let f = a.clip.from; f < a.hits[pi].a; f++) lead += 1000 / (a.clip.fps ?? 12) + (holds[f] ?? 0);
     e.strikeAt = this.now + lead;
+    if (a.perilous) this.sfx.warn("thrust");
     this.popup(this.enemy.x, this.enemy.y - 135, a.perilous ? "!!" : "!", a.perilous ? "#ff3b3b" : "#ff5d5d");
     this.note("enemyAttack", { id: a.id, strikeAt: Math.round(e.strikeAt) });
   }
@@ -505,7 +513,10 @@ export class ArenaScene extends Phaser.Scene {
           const h = a.hits[i];
           if (e.hitDone[i] || frame < h.a) continue;
           e.hitDone[i] = true;
-          if (i === 0) e.dash += f.face * this.enemyLunge(a.lunge);
+          if (i === 0) {
+            e.dash += f.face * this.enemyLunge(a.lunge);
+            this.sfx.swing(a.hits.some((x) => x.kind === "heavy"), true);
+          }
           this.enemyHits(a, h, i);
           if (a.gate && a.gate.afterHit === i && e.mode === "attack" && this.qteKind !== "clash") this.startGate(a);
           break; // one hit per frame so a gate can interrupt before the next
@@ -550,6 +561,7 @@ export class ArenaScene extends Phaser.Scene {
       case "dodged":
         if (out === "dodged") {
           this.popup(this.player.x, this.player.y - 130, a.perilous ? "SLIP" : "dodge", "#8fd3ff");
+          if (a.perilous) this.sfx.slip();
           if (a.perilous) {
             this.e.posture = Math.min(100, this.e.posture + 20);
             this.e.lastHitAt = this.now;
@@ -563,6 +575,8 @@ export class ArenaScene extends Phaser.Scene {
         this.vfx.play(FX.sparkParry, mid.x, mid.y, { scale: 1.6, flip: f.face > 0 });
         this.vfx.play(FX.smear, mid.x, mid.y - 6, { scale: 1.4, flip: f.face < 0, tint: 0x8fd3ff, add: true });
         this.popup(this.player.x, this.player.y - 130, "PARRY", "#8fd3ff");
+        this.sfx.deflect();
+        this.sfx.riposteReady();
         this.telemetry.deflectLead(this.now - p.def.guardPressedAt);
         this.telemetry.record("deflect", this.now);
         p.spirit = Math.min(HERO.spirit, p.spirit + HERO.spiritDeflect);
@@ -572,6 +586,8 @@ export class ArenaScene extends Phaser.Scene {
         this.vfx.play(FX.sparkParry, this.enemy.x, mid.y, { scale: 2.2, flip: f.face > 0 });
         this.vfx.play(FX_EXTRA.holy, this.enemy.x, mid.y - 10, { scale: 1.4, add: true });
         this.popup(this.player.x, this.player.y - 140, "COUNTER", "#ffd166");
+        this.sfx.deflect();
+        this.sfx.slip();
         this.telemetry.record("counter", this.now);
         p.spirit = Math.min(HERO.spirit, p.spirit + HERO.spiritCounter);
         break;
@@ -585,6 +601,7 @@ export class ArenaScene extends Phaser.Scene {
         this.hitstop = Math.max(this.hitstop, 50);
         this.shake(0.002, 70);
         this.popup(this.player.x, this.player.y - 130, "block", "#a5d6a7");
+        this.sfx.block();
         if (p.hp <= 0) this.killPlayer();
         else if (p.posture >= HERO.posture) this.breakPlayer();
         break;
@@ -602,6 +619,8 @@ export class ArenaScene extends Phaser.Scene {
         this.hitstop = Math.max(this.hitstop, 80);
         this.shake(0.006, 140);
         this.popup(this.player.x, this.player.y - 130, String(h.dmg), "#ff6b6b");
+        this.sfx.hurt();
+        this.sfx.hit(true);
         this.telemetry.record("hurt", this.now);
         if (p.hp <= 0) return this.killPlayer();
         p.mode = "hurt";
@@ -644,6 +663,7 @@ export class ArenaScene extends Phaser.Scene {
     this.area?.destroy();
     const def = AREAS[this.boss.area];
     this.area = new AreaView(this, def);
+    if (this.sfx && this.manifest.music) this.sfx.playMusic(def.music, 0.25);
     this.note("area", { id: def.id });
     if (this.dev && new URLSearchParams(window.location.search).has("nocard")) return;
     const t1 = this.add.text(VIEW_W / 2, 230, def.name, { fontFamily: "monospace", fontSize: "34px", color: "#f5e6c8", stroke: "#000", strokeThickness: 5 }).setOrigin(0.5).setDepth(2500).setAlpha(0);
@@ -685,6 +705,7 @@ export class ArenaScene extends Phaser.Scene {
 
   private say(text: string) {
     this.popup(this.enemy.x, this.enemy.y - 175, `"${text}"`, "#e6edf3");
+    this.sfx.blip(this.boss.id);
     this.note("taunt", { text });
   }
 
@@ -863,6 +884,7 @@ export class ArenaScene extends Phaser.Scene {
     this.player.anim.speed = 0;
     this.enemy.anim.speed = 0;
     this.popup((this.player.x + this.enemy.x) / 2, this.player.y - 150, "CLASH!", "#ffffff");
+    this.sfx.clash(0.9);
     this.vfx.play(FX.sparkParry, (this.player.x + this.enemy.x) / 2, this.player.y - 55, { scale: 1.8 });
     this.note("clashStart", { need });
   }
@@ -880,6 +902,8 @@ export class ArenaScene extends Phaser.Scene {
         if (g) {
           this.popup(this.player.x, this.player.y - 140, g.toUpperCase(), g === "perfect" ? "#ffd166" : g === "good" ? "#a5d6a7" : "#ff6b6b");
           this.note("qtePress", { key, grade: g });
+          if (g === "miss") this.sfx.locked();
+          else this.sfx.spirit();
         }
       }
     } else if (this.qteKind === "clash" && this.mash && press.attack) this.mash.press();
@@ -916,6 +940,8 @@ export class ArenaScene extends Phaser.Scene {
     this.vfx.play(sum.grade === "execute" ? FX_EXTRA.burst : FX.sparkHit, this.enemy.x, y, { scale: sum.grade === "execute" ? 2.2 : 1.6, add: sum.grade === "execute" });
     this.enemy.hitFlash(140);
     this.hitstop = sum.grade === "execute" ? 240 : 140;
+    if (sum.grade === "execute") this.sfx.deathblow();
+    else this.sfx.hit(true);
     this.shake(sum.grade === "execute" ? 0.012 : 0.006, 220);
     this.popup(this.enemy.x, this.enemy.y - 150, (sum.grade === "execute" ? "EXECUTE " : sum.grade === "clean" ? "DEATHBLOW " : "scuffed ") + dmg, sum.grade === "scuffed" ? "#ff9f43" : "#ff5d5d");
     this.note("deathblow", { grade: sum.grade, dmg, perfect: sum.perfect, good: sum.good, miss: sum.miss });
@@ -941,6 +967,7 @@ export class ArenaScene extends Phaser.Scene {
       p.spirit = Math.min(HERO.spirit, p.spirit + 1);
       this.vfx.play(FX.sparkHit, this.enemy.x, this.enemy.y - 60, { scale: 1.8 });
       this.popup(this.player.x, this.player.y - 140, "CLASH WON", "#ffd166");
+      this.sfx.deflect();
     } else {
       const dmg = Math.round(c.h.dmg * CLASH.lossDamageFraction);
       p.hp = Math.max(0, p.hp - dmg);
@@ -968,6 +995,7 @@ export class ArenaScene extends Phaser.Scene {
     e.atk = null;
     this.enemy.play(this.boss.clips.broken, { loop: true });
     this.popup(this.enemy.x, this.enemy.y - 150, "POSTURE BROKEN", "#ff9f43");
+    this.sfx.postureBreak();
     this.note("enemyBroken");
   }
   private breakPlayer() {
@@ -978,12 +1006,14 @@ export class ArenaScene extends Phaser.Scene {
     p.posture = 45;
     this.player.play(HERO_CLIPS.hurt);
     this.popup(this.player.x, this.player.y - 150, "POSTURE BROKEN", "#ff9f43");
+    this.sfx.postureBreak();
     this.note("playerBroken");
   }
   private killEnemy() {
     this.e.mode = "dead";
     this.enemy.play(this.boss.clips.death);
     this.popup(this.enemy.x, this.enemy.y - 150, "VICTORY  (N: next)", "#ffd166");
+    this.sfx.deathblow();
     this.commitMemory(true);
     this.note("enemyDead");
   }
@@ -992,6 +1022,7 @@ export class ArenaScene extends Phaser.Scene {
     this.p.def.guarding = false;
     this.player.play(HERO_CLIPS.death);
     this.popup(this.player.x, this.player.y - 150, "YOU DIED (R)", "#ff6b6b");
+    this.sfx.hurt();
     this.commitMemory(false);
     this.note("playerDead");
   }
