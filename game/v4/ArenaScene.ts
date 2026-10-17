@@ -68,6 +68,9 @@ export class ArenaScene extends Phaser.Scene {
   private keys!: Record<string, Phaser.Input.Keyboard.Key>;
   area?: AreaView;
   private hud!: Phaser.GameObjects.Graphics;
+  private hudObjects: Phaser.GameObjects.GameObject[] = [];
+  private pips: Phaser.GameObjects.Image[] = [];
+  private trail = { p: 1, e: 1 };
   private texts: Record<string, Phaser.GameObjects.Text> = {};
   sfx!: Sfx;
   /** menu: title backdrop (no input, AI idle, HUD hidden); play: the fight */
@@ -107,14 +110,19 @@ export class ArenaScene extends Phaser.Scene {
     this.buildArea();
     this.enemy = this.makeEnemy();
     this.hud = this.add.graphics().setDepth(2000);
+    this.buildHudPlates();
     this.inp = new GameInput(this, this.settings.keymap);
     this.frame = this.inp.poll();
     const K = Phaser.Input.Keyboard.KeyCodes;
     const kb = this.input.keyboard!;
     this.keys = Object.fromEntries(Object.entries({ P: K.P, O: K.O, I: K.I, R: K.R, F: K.F, N: K.N }).map(([n, c]) => [n, kb.addKey(c)]));
     const t = (k: string, x: number, y: number, size = 14, color = "#e6edf3", origin = 0) => (this.texts[k] = this.add.text(x, y, "", { fontFamily: "monospace", fontSize: size + "px", color }).setDepth(2100).setOrigin(origin, 0));
-    t("enemyName", VIEW_W / 2, 18, 14, "#e6edf3", 0.5);
-    t("combo", 40, VIEW_H - 120, 22, "#ffd166");
+    t("enemyName", VIEW_W / 2, 31, 15, "#2f2012", 0.5);
+    this.texts.enemyName.setOrigin(0.5, 0.5).setFontStyle("bold");
+    t("enemyTitle", VIEW_W / 2, 110, 12, "#e8dcc0", 0.5);
+    this.texts.enemyTitle.setStroke("#000", 3).setFontStyle("italic");
+    t("combo", 332, VIEW_H - 76, 26, "#ffd166");
+    this.texts.combo.setStroke("#000", 4).setFontStyle("bold");
     t("help", 12, VIEW_H - 22, 11, "#8b949e");
     t("debug", 12, 8, 11, "#58a6ff");
     t("qtekey", VIEW_W / 2, 150, 34, "#ffffff", 0.5);
@@ -712,6 +720,7 @@ export class ArenaScene extends Phaser.Scene {
 
   setHudVisible(v: boolean) {
     this.hud.setVisible(v);
+    for (const o of this.hudObjects) (o as Phaser.GameObjects.Image).setVisible(v);
     for (const t of Object.values(this.texts)) t.setVisible(v);
   }
 
@@ -1128,23 +1137,47 @@ export class ArenaScene extends Phaser.Scene {
     this.tweens.add({ targets: t, y: y - 34, alpha: 0, duration: 900, onComplete: () => t.destroy() });
   }
 
+  /** Static HUD art from the UI pack (immunitys), drawn once: dark nine-slice plates behind the bars, a parchment banner for the boss name. */
+  private buildHudPlates() {
+    const mk = (o: Phaser.GameObjects.GameObject) => (this.hudObjects.push(o), o);
+    const ns = (x: number, y: number, w: number, h: number, ox = 0, oy = 0) =>
+      mk(this.add.nineslice(x, y, "ui_30", undefined, w, h, 10, 10, 10, 10).setOrigin(ox, oy).setScale(2).setDepth(1990)) as Phaser.GameObjects.NineSlice;
+    ns(16, VIEW_H - 92, 150, 38);                         // player plate (screen 300 x 76)
+    ns(VIEW_W / 2, 60, 230, 24, 0.5, 0);                  // boss plate (screen 460 x 48)
+    mk(this.add.image(VIEW_W / 2, 2, "ui_44").setOrigin(0.5, 0).setScale(1.7).setDepth(1991)); // parchment strip for the name
+    this.pips = [];
+    for (let i = 0; i < HERO.spirit; i++) this.pips.push(mk(this.add.image(36 + i * 28, VIEW_H - 51, "ui_37").setOrigin(0, 0).setScale(1.1).setDepth(2001)) as Phaser.GameObjects.Image);
+  }
+
   private drawHud() {
     const g = this.hud, p = this.p, e = this.e;
     g.clear();
-    const bar = (x: number, y: number, w: number, h: number, v: number, color: number) => {
-      g.fillStyle(0x000000, 0.65).fillRect(x - 2, y - 2, w + 4, h + 4);
-      g.fillStyle(color, 1).fillRect(x, y, Math.max(0, w * Math.min(1, v)), h);
+    // easing "damage trail" behind each health bar: drops slowly to the real value, jumps up at once
+    const tr = this.trail, hpP = p.hp / HERO.hp, hpE = e.hp / this.boss.hp;
+    tr.p = hpP >= tr.p ? hpP : Math.max(hpP, tr.p - 0.0035);
+    tr.e = hpE >= tr.e ? hpE : Math.max(hpE, tr.e - 0.0035);
+    const bar = (x: number, y: number, w: number, h: number, v: number, color: number, trail?: number) => {
+      g.fillStyle(0x140e08, 1).fillRect(x - 2, y - 2, w + 4, h + 4);
+      g.fillStyle(0x2a1d12, 1).fillRect(x, y, w, h);
+      if (trail !== undefined && trail > v) g.fillStyle(0xf2e6c4, 0.85).fillRect(x, y, w * Math.min(1, trail), h);
+      const fw = Math.max(0, w * Math.min(1, v));
+      g.fillStyle(color, 1).fillRect(x, y, fw, h);
+      g.fillStyle(0xffffff, 0.22).fillRect(x, y, fw, Math.max(1, Math.floor(h / 4)));
     };
-    bar(40, VIEW_H - 80, 260, 12, p.hp / HERO.hp, 0xd1453b);
-    bar(40, VIEW_H - 62, 260, 6, p.posture / HERO.posture, p.mode === "hurt" && p.posture >= 44 ? 0xff9f43 : 0xe3b341);
-    bar(VIEW_W / 2 - 200, 40, 400, 12, e.hp / this.boss.hp, 0xb02a37);
-    bar(VIEW_W / 2 - 200, 58, 400, 6, e.posture / ENEMY.posture, e.mode === "broken" ? 0xff5d5d : 0xe3b341);
-    // spirit pips
-    for (let i = 0; i < HERO.spirit; i++) {
+    const pbx = 34, pby = VIEW_H - 80;
+    bar(pbx, pby, 264, 12, hpP, 0xd1453b, tr.p);
+    bar(pbx, pby + 18, 264, 6, p.posture / HERO.posture, p.mode === "hurt" && p.posture >= 44 ? 0xff9f43 : 0xe3b341);
+    bar(VIEW_W / 2 - 210, 74, 420, 12, hpE, 0xb02a37, tr.e);
+    bar(VIEW_W / 2 - 210, 92, 420, 6, e.posture / ENEMY.posture, e.mode === "broken" ? 0xff5d5d : 0xe3b341);
+    // phase 2 notch on the boss bar
+    g.fillStyle(0xf2e6c4, 0.9).fillRect(VIEW_W / 2 - 210 + 420 * this.boss.phase2.hpPct - 1, 72, 2, 16);
+    // spirit: flame icons, faded until earned
+    this.pips.forEach((im, i) => {
       const fill = Math.max(0, Math.min(1, p.spirit - i));
-      g.fillStyle(0x000000, 0.65).fillRect(40 + i * 22 - 1, VIEW_H - 48 - 1, 18, 10);
-      g.fillStyle(0x58a6ff, 1).fillRect(40 + i * 22, VIEW_H - 48, 16 * fill, 8);
-    }
+      im.setTexture(fill >= 1 ? "ui_31" : "ui_37").setAlpha(fill >= 1 ? 1 : 0.4 + 0.6 * fill);
+      if (fill >= 1) im.setTint(0x8fd0ff);
+      else im.clearTint();
+    });
     // perilous telegraph ring closing on the enemy; white inside the counter window
     if (e.mode === "attack" && e.atk?.perilous && this.now < e.strikeAt) {
       const left = e.strikeAt - this.now;
@@ -1179,7 +1212,9 @@ export class ArenaScene extends Phaser.Scene {
       g.fillStyle(0xffd166, 1).fillRect(cx - 80, cy - 6, 160 * Math.min(1, m.count / Math.max(1, m.need)), 18);
       this.texts.qtemsg.setText("CLASH: mash J!");
     }
-    this.texts.enemyName.setText(`${this.boss.name}, ${this.boss.title}`);
+    this.texts.enemyName.setText(this.boss.name);
+    this.texts.enemyTitle.setText(this.boss.title);
+    this.texts.help.setAlpha(Phaser.Math.Clamp(1 - (this.now - 9000) / 3000, 0, 1) * (this.mode === "play" ? 1 : 0));
     this.texts.combo.setText(p.chain > 1 ? `x${p.chain}` : "");
     if (this.dev) this.texts.debug.setText(`p:${p.mode} chain:${p.chain} hp:${Math.round(p.hp)} post:${Math.round(p.posture)} | e:${e.mode} hp:${e.hp} post:${Math.round(e.posture)} ai:${e.auto} | ${this.player.anim.sheet}#${this.player.anim.frame}`);
   }
