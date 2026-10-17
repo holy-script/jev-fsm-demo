@@ -92,7 +92,7 @@ export class Telemetry {
 }
 
 export interface DuelSnapshot {
-  boss: { segment: number; ofSegments: number; phase: 1 | 2; hpPct: number; posturePct: number; mode: string; lastActions: string[]; sameActionStreak: number };
+  boss: { segment: number; ofSegments: number; phase: 1 | 2; hpPct: number; posturePct: number; armored: boolean; mode: string; lastActions: string[]; sameActionStreak: number };
   player: {
     hpPct: number; posturePct: number; healsLeft: number; state: string; distancePx: number; distanceTrend: string; standingStillMs: number;
     guardHeld: boolean;
@@ -124,32 +124,35 @@ export interface Decision {
 }
 
 // ---------------------------------------------------------------- prompts
-const MECHANICS = `You control the Skeleton Captain, a boss in a Sekiro-style duel against a human swordsman. Both fighters have HP and a posture bar (full posture = staggered and open to a deathblow).
+const RULES_TEXT = `Both fighters have HP and a posture bar (full posture = staggered and open to a deathblow).
 Rules you must reason with:
-- The player DEFLECTS a normal or heavy attack by tapping guard just before impact: no damage to them and YOUR posture rises. Holding guard just BLOCKS: tiny chip damage, THEIR posture rises. They can only deflect if they tap shortly before the hit, so a delayed swing (a long pause before impact) beats players who tap early.
-- THRUST (red warning), SWEEP (yellow) and GRAB (purple) cannot be blocked or deflected. Rolling INTO a thrust at the right time makes the player SLIP you (+30 posture on you, you flinch), so a thrust is risky against a roller. A sweep can be rolled through. GRAB ignores guard AND roll invulnerability: only distance avoids it.
-- Their kick breaks your raised guard (GUARD). While you guard, their sword hits only raise your posture a little, but it is a bluff you can't hold forever.
-- Telegraphed attacks give the player time to react. A player who always answers one way (always rolls, always deflects, always attacks first) can be punished by the move that beats that answer.
+- The player DEFLECTS a normal or heavy attack by tapping guard just before impact: no damage to them and YOUR posture rises. Holding guard instead BLOCKS: tiny chip damage, THEIR posture rises. They can only deflect if they tap shortly before the hit, so a delayed swing (a long pause before impact) beats players who tap early.
+- Moves marked unblockable (perilous thrust, sweep, grab, laser) cannot be blocked or deflected. Rolling gives the player brief invulnerability: it beats a sweep or a beam, and rolling INTO a thrust makes them SLIP you (+30 posture on you). A grab ignores guard AND roll invulnerability: only distance avoids it.
+- A thrown projectile can be blocked, rolled through, or deflected back at you if the player's guard tap is well timed (then YOUR posture rises).
+- The player's kick breaks a raised guard unless the move description says otherwise.
+- A player who always answers the same way (always rolls, always deflects, always attacks first) can be punished by the move that beats that answer.
 Play to win but stay unpredictable: do not repeat the same action over and over, and adapt to the habits shown in the data.`;
+
+const mechanics = (def: BossDef) => `You control ${def.name}, ${def.title}, a boss in a Sekiro-style duel against a human swordsman. ${def.persona}\n${RULES_TEXT}`;
 
 export const ACTION_DESC: Record<string, string> = {
   APPROACH: "Walk toward the player to close the distance.",
   BACKSTEP: "Step back to reset spacing or bait the player into overextending.",
   CIRCLE: "Circle around the player to change the angle and bait a reaction.",
   WAIT: "Stand still, shield slightly up, watching. Reads the player and delays your next attack.",
-  GUARD: "Raise your shield for about 1.5s. Their sword hits then mostly just raise their posture, but their kick breaks it.",
+  GUARD: "Raise your shield for about 1.5s. Their sword hits then only raise your posture a little, but their kick breaks it. Good against a player who spams attacks or trades hits; poor against one who waits.",
 };
 
 export function idleQuestions(def: BossDef, available: string[], withReads = true) {
   const criteria: Record<string, string> = {};
   for (const id of available) {
     const mv = def.moves[id];
-    criteria[id] = mv ? `${mv.desc} (reach ~${mv.reach}px)` : ACTION_DESC[id] ?? id;
+    criteria[id] = mv ? `${mv.desc} (${mv.reach && mv.reach < 5000 ? `reach ~${mv.reach}px` : "any distance"})` : def.actionDesc?.[id] ?? ACTION_DESC[id] ?? id;
   }
   const questions: Record<string, unknown> = {
     next_action: {
       type: "choice",
-      instructions: `${MECHANICS}\n\nChoose the boss's NEXT action. Consider distance, reachability, the player's state and posture, your own posture, your recent actions, the last outcome, and what the player's habits against each of your moves say about what will work now.`,
+      instructions: `${mechanics(def)}\n\nChoose the boss's NEXT action. Consider distance, reachability, the player's state and posture, your own posture, your recent actions, the last outcome, and what the player's habits against each of your moves say about what will work now.`,
       criteria,
     },
   };
@@ -176,7 +179,7 @@ export function gateQuestions(def: BossDef, move: MoveDef, gate: GateDef, phase:
   return {
     gate_choice: {
       type: "choice",
-      instructions: `${MECHANICS}\n\nYou are mid-combo: ${move.label}. The first hit just resolved (see lastOutcome). Decide how the combo continues. React to how the player answered: e.g. if they deflected early, a delayed swing or a feint beats them; if they rolled, a grab or a chained thrust may punish; if they got hit, pressing on is usually right.`,
+      instructions: `${mechanics(def)}\n\nYou are mid-combo: ${move.label}. The first hit just resolved (see lastOutcome). Decide how the combo continues. React to how the player answered: e.g. if they deflected early, a delayed swing or a feint beats them; if they rolled, a grab or a chained thrust may punish; if they got hit, pressing on is usually right.`,
       criteria,
     },
   };
@@ -226,7 +229,7 @@ function weighted<T>(items: [T, number][]): T {
 
 export function rulesIdle(def: BossDef, snap: DuelSnapshot, available: string[], source: "rules" | "fallback" = "rules", error?: string): Decision {
   const d = snap.player.distancePx;
-  const table = d <= 92 ? def.weights.close : d <= 150 ? def.weights.mid : [["APPROACH", 1]] as [string, number][];
+  const table = d <= 92 ? def.weights.close : d <= 150 ? def.weights.mid : def.weights.far ?? ([["APPROACH", 1]] as [string, number][]);
   const last = snap.boss.lastActions[snap.boss.lastActions.length - 1];
   let pool = table.filter(([id]) => available.includes(id)).map(([id, w]) => [id, id === last ? w * 0.3 : w] as [string, number]);
   if (!pool.length) pool = [[available.includes("APPROACH") ? "APPROACH" : available[0], 1]];

@@ -3,7 +3,7 @@
 Jev (TypeSafe's decision model) picks the next state of an enemy finite state machine; you try to beat it. Next.js + Phaser.
 
 - `/boss-rush` - side-view hack & slash, four bosses (Slime, Fire Worm, Evil Wizard, Bringer of Death), Tiled arenas. Needs assets: see [tools/README.md](tools/README.md).
-- `/duel` - Sekiro-style posture duel on a large top-down map (deflect, posture bars, deathblows, perilous attacks). Jev drives the boss. Assets: see [tools/README.md](tools/README.md).
+- `/duel` - Sekiro-style posture duel on a large top-down map (deflect, posture bars, deathblows, perilous attacks). Two bosses (Skeleton Captain, Mecha-Stone Golem), both driven by Jev. Assets: see [tools/README.md](tools/README.md).
 - `/basic` - v1, a top-down shooter duel with procedural art. Also kept on the `v1-basic` branch.
 
 ```bash
@@ -29,3 +29,10 @@ The snapshot Jev sees includes your last 8 seconds of actions and, per boss move
 If Jev errors, is slow (>1.5s) or answers with an unavailable action, the boss falls back to a fixed-priority rules bot for that decision and the log marks it. **F** switches the whole fight to the rules bot for comparison.
 
 `npm run test:duel` runs the scripted checks (mechanics, and the Jev gate logic against a mocked API). `node tests/duel/personas.mjs` runs three play-style bots against the real Jev and prints how its choices and reads change.
+
+### The two bosses
+
+- **Skeleton Captain** - shield duelist. Double slash with branch points, delayed overhead, perilous thrust, sweep, grab; a guard stance a kick can break.
+- **Mecha-Stone Golem** - slow, huge, cannot be flinched. Crushing stone fist, a thrown fist you can deflect back at it, a laser whose aim locks 0.3s before firing, a stone guard that only a heavy attack breaks, and an armor buff (half damage for 7s). Phase 2 throws two fists.
+
+`node tests/duel/golem.mjs` checks the Golem's mechanics; `node tests/duel/personas.mjs 40000 1` runs the play-style bots against it (the last argument picks the boss: 0 Captain, 1 Golem).

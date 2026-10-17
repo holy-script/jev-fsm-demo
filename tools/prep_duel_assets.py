@@ -55,6 +55,57 @@ cap = {"idle": "idle-*.png", "walk": "walk-*.png", "atkA": "attack-A*.png", "atk
 for k, pat in cap.items():
     strip(f"cap_{k}", os.path.join(E, pat), f"captain/{k}.png")
 
+# ---- Mecha-Stone Golem (Darkpixel): a 10x10 grid of 100x100 cells; rows are animations
+GOL = os.path.join(P2, "mecha-golem-free")
+gdir = None
+for root, _, fs in os.walk(GOL):
+    if "Character_sheet.png" in fs:
+        gdir = os.path.dirname(root)
+if gdir is None:
+    sys.exit("Mecha-stone Golem pack not found in assets/packs2")
+sheet = Image.open(os.path.join(gdir, "PNG sheet", "Character_sheet.png")).convert("RGBA")
+
+def grid_strip(key, cells, dest, cell=100):
+    """cells: list of (col, row) in the 100x100 grid -> one horizontal strip."""
+    frames = [sheet.crop((c * cell, r * cell, (c + 1) * cell, (r + 1) * cell)) for c, r in cells]
+    out = Image.new("RGBA", (cell * len(frames), cell))
+    for i, f in enumerate(frames):
+        out.paste(f, (i * cell, 0))
+    os.makedirs(os.path.dirname(os.path.join(OUT, dest)), exist_ok=True)
+    out.save(os.path.join(OUT, dest))
+    boxes = [f.getbbox() for f in frames if f.getbbox()]
+    manifest["sheets"][key] = {
+        "file": "duel-assets/" + dest, "frameW": cell, "frameH": cell, "frames": len(frames),
+        "bbox": [min(b[0] for b in boxes), min(b[1] for b in boxes), max(b[2] for b in boxes), max(b[3] for b in boxes)],
+        "first": list(frames[0].getbbox() or (0, 0, cell, cell)),
+    }
+
+row = lambda r, n: [(c, r) for c in range(n)]
+grid_strip("golem_idle", row(0, 4), "golem/idle.png")
+grid_strip("golem_glow", row(1, 8), "golem/glow.png")
+grid_strip("golem_arm", row(2, 9), "golem/arm.png")
+grid_strip("golem_block", row(3, 8), "golem/block.png")
+grid_strip("golem_hit", [(1, 3), (2, 3), (3, 3), (2, 3)], "golem/hit.png")        # the start of the curl reads as a stagger
+grid_strip("golem_melee", row(4, 7), "golem/melee.png")
+grid_strip("golem_laser", row(5, 7), "golem/laser.png")
+grid_strip("golem_armor", row(6, 10), "golem/armor.png")
+grid_strip("golem_dead", row(7, 10) + row(8, 4), "golem/dead.png")
+
+wp = os.path.join(gdir, "weapon PNG")
+laser = Image.open(os.path.join(wp, "Laser_sheet.png")).convert("RGBA")       # 300x1500 = fifteen 300x100 frames; 9-14 are the beam
+beam = Image.new("RGBA", (300 * 6, 100))
+for i in range(6):
+    beam.paste(laser.crop((0, (9 + i) * 100, 300, (10 + i) * 100)), (i * 300, 0))
+os.makedirs(os.path.join(OUT, "fx"), exist_ok=True)
+beam.save(os.path.join(OUT, "fx", "beam.png"))
+manifest["sheets"]["fx_beam"] = {"file": "duel-assets/fx/beam.png", "frameW": 300, "frameH": 100, "frames": 6, "bbox": [30, 11, 300, 55], "first": [30, 11, 300, 55], "originX": 40, "originY": 33}
+glow = Image.open(os.path.join(wp, "arm_projectile_glowing.png")).convert("RGBA")   # 3x2 grid of 100x100
+fist = Image.new("RGBA", (600, 100))
+for i in range(6):
+    fist.paste(glow.crop(((i % 3) * 100, (i // 3) * 100, (i % 3) * 100 + 100, (i // 3) * 100 + 100)), (i * 100, 0))
+fist.save(os.path.join(OUT, "fx", "fist.png"))
+manifest["sheets"]["fx_fist"] = {"file": "duel-assets/fx/fist.png", "frameW": 100, "frameH": 100, "frames": 6, "bbox": [60, 30, 95, 44], "first": [60, 30, 95, 44]}
+
 # ---- tileset: Ninja Adventure TilesetRelief (orange): plateau 4x3 + cliff face 3x3 -> 7x3
 relief = Image.open(os.path.join(NA, "Backgrounds", "Tilesets", "TilesetRelief.png")).convert("RGBA")
 tiles = Image.new("RGBA", (7 * 16, 3 * 16))

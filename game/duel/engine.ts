@@ -113,6 +113,9 @@ export class Fighter {
     return this.x !== saved.x || this.y !== saved.y;
   }
 
+  get flashing() {
+    return this.flash > 0;
+  }
   hitFlash(ms = 80) {
     this.flash = ms;
     this.sprite.setTintFill(0xffffff);

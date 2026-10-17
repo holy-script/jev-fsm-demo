@@ -75,7 +75,7 @@ export default function DuelClient() {
         )}
         <div ref={parent} style={{ width: "100%", aspectRatio: "16 / 9", background: "#0b0d12", border: "1px solid #30363d" }} />
         <p style={{ opacity: 0.7, fontSize: 13 }}>
-          Walk north through the gate to wake the boss. Deflect (tap guard just before impact) to break its posture, then land the deathblow.{" "}
+          Walk north through the gate to wake the first boss. Deflect (tap guard just before impact) to break its posture, then land the deathblow. Beat the Skeleton Captain to face the Mecha-Stone Golem.{" "}
           <b>F</b> swaps the boss&apos;s brain between Jev and a fixed-priority rules bot.
         </p>
       </div>
@@ -117,7 +117,7 @@ export default function DuelClient() {
         {key("SHIFT", "roll · dodge a red thrust = SLIP")}
         {key("E / Q", "kick (breaks guard) / heal")}
         {key("F / R / M", "brain / retry / music")}
-        <div style={{ opacity: 0.55, marginTop: 4 }}>dev: Z X C V B force attacks · G guard · N auto · T refill · Y wake</div>
+        <div style={{ opacity: 0.55, marginTop: 4 }}>dev: Z X C V B force the boss's moves in order · G guard · N auto · T refill · Y wake · 1/2 pick boss</div>
 
         <h3 style={{ margin: "12px 0 4px" }}>Events</h3>
         <div style={{ maxHeight: 120, overflowY: "auto", opacity: 0.8 }}>

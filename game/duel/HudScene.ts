@@ -67,6 +67,7 @@ export class HudScene extends Phaser.Scene {
       const bc = s.bossPosture < 0.6 ? lerpColor(0xe9e2cf, 0xf0a030, s.bossPosture / 0.6) : lerpColor(0xf0a030, 0xe0302a, (s.bossPosture - 0.6) / 0.4);
       this.centreBar(VIEW_W / 2, y + 22, 340, 7, s.bossPosture, bc);
       if (s.bossGuard) g.fillStyle(0x8fd0ff).fillRect(VIEW_W / 2 + 180, y + 20, 10, 10);
+      if (s.bossArmor) g.fillStyle(0x9fe8ff).fillRect(VIEW_W / 2 + 196, y + 20, 10, 10).lineStyle(1, 0x000000, 0.8).strokeRect(VIEW_W / 2 + 196, y + 20, 10, 10);
       this.bossName.setText(s.bossName).setVisible(true);
     } else this.bossName.setVisible(false);
 

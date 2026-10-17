@@ -6,17 +6,18 @@ const errs = []; p.on("pageerror", e => errs.push("PAGEERR: " + (e.stack || e.me
 await p.goto("http://localhost:3000/duel", { waitUntil: "load" });
 await p.waitForFunction(() => window.__duel?.player, null, { timeout: 30000 }); await p.waitForTimeout(800);
 const DUR = Number(process.argv[2] ?? 45000);
+const BOSS = Number(process.argv[3] ?? 0); // 0 = Skeleton Captain, 1 = Golem
 async function run(name, driver) {
-  await p.evaluate(() => { const d = window.__duel; d.hud.brain = "JEV"; d.reset(); d.debugWake(); d.b.auto = true; d.refill();
+  await p.evaluate((BOSS_IDX) => { const d = window.__duel; d.hud.brain = "JEV"; d.reset(BOSS_IDX); d.debugWake(); d.b.auto = true; d.refill();
     d.boss.x = d.world.spawns.boss.x; d.boss.y = d.world.spawns.boss.y; d.player.x = d.boss.x - 70; d.player.y = d.boss.y;
     window.__dec = []; if (!window.__hooked) { window.__hooked = true; const o = d.hooks.onDecision; d.hooks.onDecision = (x) => { window.__dec.push(x); o(x); }; }
-    d.tel.reset(); });
+    d.tel.reset(); }, BOSS);
   const t0 = Date.now(); const held = new Set();
   const down = async k => { if (!held.has(k)) { held.add(k); await p.keyboard.down(k); } }; const up = async k => { if (held.has(k)) { held.delete(k); await p.keyboard.up(k); } };
   const tap = async (k, ms = 30) => { await p.keyboard.down(k); await p.waitForTimeout(ms); await p.keyboard.up(k); };
   while (Date.now() - t0 < DUR) {
     const s = await p.evaluate(() => { const d = window.__duel; if (d.p.hp < 55 && d.p.mode !== "dead") d.p.hp = 80; if (d.p.mode === "dead") d.reset();
-      d.b.hp = Math.max(d.b.hp, 120); d.b.posture = Math.min(d.b.posture, 55); d.b.seg = 0; return { bm: d.b.mode, held: d.b.held, hu: d.b.holdUntil, now: d.time.now, dist: Math.hypot(d.boss.x - d.player.x, d.boss.y - d.player.y), pm: d.p.mode }; });
+      d.b.hp = Math.max(d.b.hp, 120); d.b.posture = Math.min(d.b.posture, 55); d.b.seg = 0; if (d.p.mode === "dead") d.reset(d.bossIdx); return { bm: d.b.mode, held: d.b.held, hu: d.b.holdUntil, now: d.time.now, dist: Math.hypot(d.boss.x - d.player.x, d.boss.y - d.player.y), pm: d.p.mode }; });
     await driver({ s, down, up, tap });
     await p.waitForTimeout(25);
   }
@@ -36,6 +37,8 @@ await run("ROLLER (rolls each attack, pokes when safe)", async ({ s, down, up, t
   if (s.bm === "attack" && s.held && s.now >= s.hu - 110) await tap("Shift");
   else if ((s.bm === "recover" || s.bm === "idle") && s.dist < 64) await tap("j");
 });
+// kiter: hangs back at ~220px, never attacks
+await run("KITER (stays at range, never attacks)", async ({ s, down, up }) => { await up("Space"); if (s.dist < 190) { await up("d"); await down("a"); } else if (s.dist > 250) { await up("a"); await down("d"); } else { await up("a"); await up("d"); } });
 // greedy: spams attacks, never defends
 await run("GREEDY (spams light attacks, never defends)", async ({ s, down, up, tap }) => { await up("Space"); if (s.dist > 58) await down("d"); else await up("d"); if (s.dist < 66) await tap("j", 25); });
 console.log(errs.join("\n") || "\nno page errors");

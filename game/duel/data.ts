@@ -5,7 +5,7 @@ export const VIEW_W = 960;
 export const VIEW_H = 540;
 export const TILE = 16;
 
-export type AtkType = "normal" | "heavy" | "thrust" | "sweep" | "grab";
+export type AtkType = "normal" | "heavy" | "thrust" | "sweep" | "grab" | "beam";
 export type Shape = { kind: "cone"; range: number; half: number } | { kind: "circle"; range: number };
 
 export interface HitDef {
@@ -30,7 +30,29 @@ export interface GateDef {
   default: string;
 }
 
+export interface SpawnDef {
+  frame: number;
+  speed: number;
+  damage: number;
+  posture: number;
+  deflectPosture: number; // posture the boss takes when the player deflects the projectile back
+}
+export interface BeamDef {
+  frame: number;
+  ms: number;
+  length: number;
+  halfWidth: number;
+  damage: number;
+  posture: number;
+  lockMs: number; // the aim stops tracking this long before the beam fires
+}
+
 export interface MoveDef {
+  kind?: "melee" | "projectile" | "beam" | "buff"; // default melee
+  spawns?: SpawnDef[]; // projectile moves
+  spawnsP2?: SpawnDef[]; // replaces spawns in phase 2
+  beam?: BeamDef;
+  buff?: { frame: number; ms: number }; // armor-up
   id: string;
   label: string;
   desc?: string; // what Jev is told this move is for
@@ -89,14 +111,21 @@ export interface BossDef {
   title: string;
   prefix: string; // manifest sheet prefix
   scale: number;
+  headY: number; // height of the head above the feet, for glyphs and popups
   segments: number;
   segmentHp: number;
   maxPosture: number;
   speed: number;
   radius: number;
   moves: Record<string, MoveDef>;
-  // rough preferred spacing used by the placeholder brain (Jev replaces it)
-  weights: { close: [string, number][]; mid: [string, number][] };
+  anims: { idle: string; walk: string; hit: string; block: string; dead: string }; // sheet suffixes
+  guardLoop?: boolean; // false: the guard animation plays once and holds its last frame
+  stoneGuard?: boolean; // guard is immune to light attacks and kicks; only a heavy breaks it
+  noFlinch?: boolean; // hits never interrupt it (it only flashes)
+  persona: string; // told to Jev
+  actionDesc?: Record<string, string>; // overrides for the generic actions (e.g. GUARD)
+  dummyKeys: string[]; // move ids bound to Z X C V B in the training-dummy mode
+  weights: { close: [string, number][]; mid: [string, number][]; far?: [string, number][] };
 }
 
 const GATE = {
@@ -112,11 +141,15 @@ export const CAPTAIN: BossDef = {
   title: "Shield of the Fallen",
   prefix: "cap",
   scale: 1.25,
+  headY: 78,
   segments: 2,
   segmentHp: 150,
   maxPosture: 100,
   speed: 62,
   radius: 9,
+  anims: { idle: "idle", walk: "walk", hit: "hit", block: "block", dead: "dead" },
+  persona: "A disciplined skeleton duelist with a shield and a heavy cleaver. Its strength is mixing blockable chains with unblockable surprises.",
+  dummyKeys: ["SLASH2", "OVERHEAD", "THRUST", "SWEEP", "GRAB"],
   moves: {
     SLASH2: {
       id: "SLASH2", cooldown: 1200, label: "Double slash", reach: 82,
@@ -184,7 +217,78 @@ export const CAPTAIN: BossDef = {
   },
 };
 
+export const GOLEM: BossDef = {
+  id: "golem",
+  name: "MECHA-STONE GOLEM",
+  title: "Heart of the Ruin",
+  prefix: "golem",
+  scale: 2.2,
+  headY: 104,
+  segments: 2,
+  segmentHp: 190,
+  maxPosture: 100,
+  speed: 36,
+  radius: 15,
+  anims: { idle: "idle", walk: "idle", hit: "hit", block: "block", dead: "dead" },
+  guardLoop: false,
+  stoneGuard: true,
+  noFlinch: true,
+  persona:
+    "A huge, slow stone construct. It cannot be flinched by normal hits and is dangerous at every range: a crushing fist up close, a deflectable thrown fist at mid range, and a long unblockable laser. Its weakness is posture: deflecting its fist back, or breaking its stone guard with a heavy attack. It wins by controlling space and punishing impatience.",
+  actionDesc: {
+    APPROACH: "Stomp toward the player to close the distance.",
+    BACKSTEP: "Lumber backward to reopen the distance for ranged attacks.",
+    CIRCLE: "Slowly circle the player to change the firing angle.",
+    WAIT: "Stand still and let the player act; reads their behaviour. Cheap and safe.",
+    GUARD: "Curl into a stone ball for about 2 seconds. Light attacks and kicks do NOTHING to it (the player only gains a little posture), and only a heavy attack breaks it. An excellent answer to a player who is spamming light attacks, rushing in, or trading hits; useless against a player who simply waits or keeps away.",
+  },
+  dummyKeys: ["STONE_FIST", "ARM_SHOT", "LASER", "ARMOR_UP"],
+  moves: {
+    STONE_FIST: {
+      id: "STONE_FIST", cooldown: 2600, label: "Stone fist", reach: 96,
+      desc: "A slow crushing overhand swing with a very long wind-up. Big damage if it lands and big posture damage if blocked, but easy to deflect or dodge for a patient player. Strong against players who stay close.",
+      anim: "melee", fps: 12,
+      hits: [{ frames: [4, 5], type: "heavy", damage: 30, posture: 36, deflectPosture: 22, shape: cone(70, 58) }],
+      holds: [{ frame: 2, ms: 440 }], lunge: [{ frames: [3, 5], speed: 50 }],
+      gates: [{ after: 0, at: "end", default: "END", options: [
+        { id: "END", desc: "Stop and recover. Safe, but gives the player a turn." },
+        { id: "ARM_SHOT", desc: "Fire the arm point-blank right after the swing; punishes a player who stepped in to punish." },
+        { id: "STONE_GUARD", desc: "Curl up into stone guard to bait a greedy punish." },
+        { id: "LASER", desc: "Chain straight into the laser charge.", phase2: true },
+      ] }],
+    },
+    ARM_SHOT: {
+      id: "ARM_SHOT", cooldown: 2800, label: "Arm shot", reach: 340, kind: "projectile",
+      desc: "Launch a stone fist in a straight line. The player can block it, roll through it, or deflect it back at you for big posture damage on you if their tap is well timed. Good at mid-to-long range to force a reaction. In phase 2 it fires two in a row.",
+      anim: "arm", fps: 12, hits: [],
+      holds: [{ frame: 2, ms: 380 }],
+      spawns: [{ frame: 3, speed: 240, damage: 18, posture: 22, deflectPosture: 16 }],
+      spawnsP2: [{ frame: 3, speed: 240, damage: 18, posture: 22, deflectPosture: 16 }, { frame: 6, speed: 280, damage: 18, posture: 22, deflectPosture: 16 }],
+    },
+    LASER: {
+      id: "LASER", cooldown: 7000, label: "Laser", reach: 300, kind: "beam",
+      desc: "Charge for about a second, then fire a straight beam. Cannot be blocked or deflected. The aim tracks the player during the charge and locks about 0.3s before firing: the player must step or roll off the line in that window, or roll through it. Punishes players who stand still, turtle at range, or strafe in a straight line.",
+      anim: "laser", fps: 10, hits: [],
+      holds: [{ frame: 4, ms: 780 }, { frame: 6, ms: 480 }],
+      beam: { frame: 5, ms: 460, length: 300, halfWidth: 13, damage: 34, posture: 28, lockMs: 300 },
+    },
+    ARMOR_UP: {
+      id: "ARMOR_UP", cooldown: 16000, label: "Armor up", reach: 9999, kind: "buff",
+      desc: "Harden for 7 seconds: you take half damage, ignore posture buildup partially, cannot be flinched, and your hits land 25% harder. Takes a moment to cast, so use it when the player is far or recovering. The player's answers are to keep their distance, deflect, or use heavy attacks to break posture instead of damaging HP.",
+      anim: "armor", fps: 10, hits: [], buff: { frame: 5, ms: 7000 },
+    },
+  },
+  weights: {
+    close: [["STONE_FIST", 40], ["GUARD", 18], ["BACKSTEP", 12], ["ARM_SHOT", 15], ["ARMOR_UP", 10], ["CIRCLE", 5]],
+    mid: [["ARM_SHOT", 35], ["LASER", 20], ["APPROACH", 35], ["STONE_FIST", 10]],
+    far: [["LASER", 35], ["ARM_SHOT", 35], ["APPROACH", 30]],
+  },
+};
+
+export const BOSSES: BossDef[] = [CAPTAIN, GOLEM];
+
 export const GLYPH: Record<AtkType, { color: number; label: string } | null> = {
+  beam: { color: 0xff8a2b, label: "!" },
   normal: null,
   heavy: null,
   thrust: { color: 0xff3b3b, label: "!" },

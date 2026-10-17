@@ -28,7 +28,7 @@ npm run assets                           # slices strips + manifest.json, cuts t
 |---|---|---|---|
 | Hero and Opponents | Szadi art | edit and use freely, no resale | hero + Shield Skeleton |
 | Ninja Adventure | pixel-boy | CC0 | cliff tiles, 28 sound effects, 2 music tracks |
-| Mecha-Stone Golem | Darkpixel | none stated | planned boss 2 |
+| Mecha-Stone Golem | Darkpixel | none stated | boss 2 |
 
 ```bash
 npm run assets:download:duel                       # fetches into assets/_dl2
