@@ -1,6 +1,6 @@
 import * as Phaser from "phaser";
 import { Fighter, World, angleTo, dist, inShape, type DuelManifest } from "./engine";
-import { BOSSES, ENCOUNTERS, GAME, GLYPH, HERO, HERO_MOVES, LIGHT_CHAIN, SPIRIT, TILE, ZOOM, type AtkType, type BossDef, type GateDef, type HitDef, type MoveDef, type SpawnDef } from "./data";
+import { AREAS, BOSSES, ENCOUNTERS, GAME, GLYPH, HERO, HERO_MOVES, LIGHT_CHAIN, SPIRIT, TILE, ZOOM, type AtkType, type BossDef, type AreaDef, type GateDef, type HitDef, type MoveDef, type SpawnDef } from "./data";
 import { DIFFICULTY, save, saveGame, settings } from "./settings";
 import { Vfx } from "./vfx";
 import { awardPoint, has } from "./skills";
@@ -21,6 +21,7 @@ export interface HudState {
   brain: "JEV" | "RULES"; thinking: boolean; last: string; bossArmor: boolean; brainActual?: "JEV" | "RULES";
   spirit: number; maxSpirit: number; riposte: boolean; art: boolean; tool: boolean;
   dialog: { who: string; text: string; done: boolean; i: number; n: number } | null;
+  card: { text: string; sub: string; alpha: number } | null;
   objective: { title: string; text: string; progress?: string; hint?: string } | null;
 }
 interface Proj { x: number; y: number; vx: number; vy: number; spr: Phaser.GameObjects.Sprite; dmg: number; post: number; defl: number; moveId: string; reflected: boolean; consumed: boolean; dodged: boolean; born: number }
@@ -52,6 +53,12 @@ export class DuelScene extends Phaser.Scene {
   private world!: World;
   private def: BossDef = ENCOUNTERS[0];
   private bossIdx = 0;
+  private areaId = "monastery";
+  private zoneId = "";
+  private map?: Phaser.Tilemaps.Tilemap;
+  private mapObjs: Phaser.GameObjects.GameObject[] = [];
+  private travelling = false;
+  private card: { text: string; sub: string; t0: number } | null = null;
   // tutorial / dialogue state
   private dlg: { lines: { who: string; text: string }[]; i: number; shown: number; resolve: () => void } | null = null;
   private waiters: { cond: () => boolean; resolve: (v: boolean) => void; start: number; opts: { progress?: () => string; hints?: { afterMs: number; text: string }[]; timeoutMs?: number } }[] = [];
@@ -122,12 +129,7 @@ export class DuelScene extends Phaser.Scene {
       if (this.anims.exists(key)) continue;
       this.anims.create({ key, frames: this.anims.generateFrameNumbers(key, { start: 0, end: s.frames - 1 }), frameRate: FPS[key] ?? 14, repeat: LOOP.has(key) ? -1 : 0 });
     }
-    const map = this.make.tilemap({ key: "duel_map" });
-    const ts = map.addTilesetImage("duel_tiles", "duel_tiles")!;
-    map.createLayer("ground", ts)!.setDepth(0).setTint(0xc9b3a4);
-    map.createLayer("walls", ts)!.setDepth(1);
-    this.world = new World(map);
-    this.cameras.main.setBackgroundColor("#0b0d12").setZoom(ZOOM).setBounds(0, 0, map.widthInPixels, map.heightInPixels).setRoundPixels(true);
+    this.loadArea("monastery");
 
     this.sfx = new Sfx(this, this.man);
     this.vfx = new Vfx(this);
@@ -180,7 +182,7 @@ export class DuelScene extends Phaser.Scene {
     this.keys.TWO.on("down", () => !this.tutorialOn && this.reset(this.idxOf("golem")));
 
     this.events.on("skills-closed", () => this.finishShrine());
-    this.hud = { hp: 1, posture: 0, heals: HERO.heals, bossVisible: false, bossName: BOSSES[0].name, bossHp: 1, bossSegs: BOSSES[0].segments, bossSeg: 0, bossPosture: 0, bossGuard: false, message: "", sub: "", auto: true, music: true, brain: "JEV", thinking: false, last: "", bossArmor: false, spirit: 0, maxSpirit: 3, riposte: false, art: false, tool: false, dialog: null, objective: null };
+    this.hud = { hp: 1, posture: 0, heals: HERO.heals, bossVisible: false, bossName: BOSSES[0].name, bossHp: 1, bossSegs: BOSSES[0].segments, bossSeg: 0, bossPosture: 0, bossGuard: false, message: "", sub: "", auto: true, music: true, brain: "JEV", thinking: false, last: "", bossArmor: false, spirit: 0, maxSpirit: 3, riposte: false, art: false, tool: false, dialog: null, objective: null, card: null };
     this.registry.set("hud", this.hud);
     if (process.env.NODE_ENV !== "production") (window as unknown as { __duel?: DuelScene }).__duel = this; // for scripted tests
     this.scene.launch("duelhud");
@@ -220,6 +222,8 @@ export class DuelScene extends Phaser.Scene {
   }
 
   private reset(idx = this.bossIdx) {
+    const want = this.areaFor(this.seq()[idx]);
+    if (want !== this.areaId) this.loadArea(want);
     const w = this.world;
     const s = w.spawns;
     this.clearEntities();
@@ -236,7 +240,7 @@ export class DuelScene extends Phaser.Scene {
     this.cameras.main.setBounds(0, 0, this.world.w * TILE, this.world.h * TILE);
     this.cam.x = this.player.x;
     this.cam.y = this.player.y - 20;
-    this.sfx.playMusic("temple", 0.22);
+    this.sfx.playMusic(AREAS[this.areaId].music, 0.22);
     this.hud.message = "";
     this.hud.sub = "";
     this.hud.bossVisible = false;
@@ -246,6 +250,8 @@ export class DuelScene extends Phaser.Scene {
   /** After a boss falls: heal a little, then the next guardian rises in the same arena. */
   private nextBoss(heal = 40) {
     if (this.p.mode === "dead") return;
+    const nextDef = this.seq()[this.bossIdx + 1];
+    if (this.areaFor(nextDef) !== this.areaId) return this.travel(this.bossIdx + 1);
     this.p.hp = Math.min(HERO.maxHp, this.p.hp + heal);
     this.p.posture = 0;
     if (heal >= 40) this.p.heals = Math.min(HERO.heals, this.p.heals + 1);
@@ -349,6 +355,8 @@ export class DuelScene extends Phaser.Scene {
       this.hitstop -= deltaMs;
       this.player.sprite.anims.timeScale = 0;
       this.boss.sprite.anims.timeScale = 0;
+    } else if (this.travelling) {
+      this.player.sprite.anims.timeScale = 0;
     } else if (this.dlg) {
       this.updateDialogue(deltaMs / 1000);
       this.player.sprite.anims.timeScale = 0;
@@ -374,6 +382,7 @@ export class DuelScene extends Phaser.Scene {
     this.lastPx = this.player.x;
     this.lastPy = this.player.y;
     this.updateNpc(now);
+    this.updateZone(now);
     this.player.tickFx(deltaMs);
     this.boss.tickFx(deltaMs);
     this.player.sync();
@@ -596,6 +605,69 @@ export class DuelScene extends Phaser.Scene {
       }
     });
     void ix; void iy;
+  }
+
+  // ------------------------------------------------------------ areas
+  private areaFor(def: BossDef): string {
+    return this.registry.get("dev") ? "monastery" : def.area ?? "monastery";
+  }
+
+  /** Builds an area: its tilemap, tints, background and collision world. */
+  private loadArea(id: string) {
+    const area: AreaDef = AREAS[id];
+    this.mapObjs.forEach((o) => o.destroy());
+    this.mapObjs = [];
+    this.map?.destroy();
+    const map = this.make.tilemap({ key: area.map });
+    const ts = map.addTilesetImage("duel_tiles", "duel_tiles")!;
+    this.mapObjs.push(map.createLayer("ground", ts)!.setDepth(0).setTint(area.groundTint), map.createLayer("walls", ts)!.setDepth(1).setTint(area.wallTint));
+    this.map = map;
+    this.world = new World(map);
+    this.areaId = id;
+    this.zoneId = "";
+    this.cameras.main.setBackgroundColor(area.bg).setZoom(ZOOM).setBounds(0, 0, map.widthInPixels, map.heightInPixels).setRoundPixels(true);
+    if (area.stars) {
+      const g = this.add.graphics().setDepth(-5);
+      for (let i = 0; i < 160; i++) g.fillStyle(0xdfe6ff, 0.25 + Math.random() * 0.6).fillRect(Math.random() * map.widthInPixels, Math.random() * map.heightInPixels, Math.random() < 0.15 ? 2 : 1, Math.random() < 0.15 ? 2 : 1);
+      this.mapObjs.push(g);
+    }
+  }
+
+  /** Fade out, load the next area and its encounter, fade in with a title card. */
+  private travel(idx: number) {
+    if (this.travelling) return;
+    this.travelling = true;
+    this.cameras.main.fadeOut(700, 0, 0, 0);
+    this.cameras.main.once("camerafadeoutcomplete", () => {
+      this.reset(idx);
+      this.travelling = false;
+      const area = AREAS[this.areaId];
+      this.showCard(area.name, area.zones[0].sub);
+      this.cameras.main.fadeIn(900, 0, 0, 0);
+      this.hooks.onLog(`arrived: ${area.name}`);
+    });
+  }
+
+  private showCard(text: string, sub: string) {
+    this.card = { text, sub, t0: this.time.now };
+  }
+  private updateZone(now: number) {
+    const area = AREAS[this.areaId];
+    const ty = this.player.y / TILE;
+    const z = area.zones.find((zz) => ty >= zz.yMin && ty <= zz.yMax);
+    if (z && z.id !== this.zoneId) {
+      if (this.zoneId && !this.travelling) this.showCard(z.name, z.sub);
+      this.zoneId = z.id;
+    }
+    const c = this.card;
+    if (!c) return void (this.hud.card = null);
+    const t = now - c.t0;
+    if (t > 3600) {
+      this.card = null;
+      this.hud.card = null;
+      return;
+    }
+    this.hud.card = { text: c.text, sub: c.sub, alpha: t < 500 ? t / 500 : t > 2800 ? Math.max(0, 1 - (t - 2800) / 800) : 1 };
   }
 
   // ------------------------------------------------------------ dialogue, objectives and the tutorial
@@ -1036,7 +1108,7 @@ export class DuelScene extends Phaser.Scene {
     const more = this.bossIdx + 1 < this.seq().length;
     this.hud.message = !more ? "VICTORY" : this.def.kind === "grunt" ? "DEFEATED" : "DEMISE";
     this.hud.sub = more ? `${this.seq()[this.bossIdx + 1].name} stirs…` : "R to fight again";
-    this.sfx.playMusic("temple", 0.22);
+    this.sfx.playMusic(AREAS[this.areaId].music, 0.22);
     this.hooks.onLog(`${this.def.name} defeated`);
     if (!this.def.kind || this.def.kind === "boss") awardPoint(1);
     if (!save.cleared.includes(this.def.id)) save.cleared.push(this.def.id);

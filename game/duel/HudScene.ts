@@ -16,6 +16,8 @@ export class HudScene extends Phaser.Scene {
   private help!: Phaser.GameObjects.Text;
   private brain!: Phaser.GameObjects.Text;
   private riposteText!: Phaser.GameObjects.Text;
+  private cardText!: Phaser.GameObjects.Text;
+  private cardSub!: Phaser.GameObjects.Text;
   private dlgWho!: Phaser.GameObjects.Text;
   private dlgText!: Phaser.GameObjects.Text;
   private dlgMore!: Phaser.GameObjects.Text;
@@ -36,6 +38,8 @@ export class HudScene extends Phaser.Scene {
     this.bossName = this.add.text(VIEW_W / 2, 22, "", { ...font, fontSize: "16px", strokeThickness: 4 }).setOrigin(0.5, 0);
     this.brain = this.add.text(28, VIEW_H - 92, "", { ...font, fontSize: "13px", strokeThickness: 3 }).setOrigin(0, 0);
     this.riposteText = this.add.text(VIEW_W / 2, VIEW_H - 86, "RIPOSTE  [J]", { ...font, fontSize: "18px", color: "#fff2b0", strokeThickness: 4 }).setOrigin(0.5).setVisible(false);
+    this.cardText = this.add.text(VIEW_W / 2, 150, "", { ...font, fontSize: "46px", strokeThickness: 8 }).setOrigin(0.5).setAlpha(0);
+    this.cardSub = this.add.text(VIEW_W / 2, 200, "", { ...font, fontSize: "18px", color: "#b9a98a", strokeThickness: 3 }).setOrigin(0.5).setAlpha(0);
     this.dlgWho = this.add.text(VIEW_W / 2 - 430, VIEW_H - 286, "", { ...font, fontSize: "17px", color: "#9fd0ff", strokeThickness: 4 }).setDepth(5);
     this.dlgText = this.add.text(VIEW_W / 2 - 430, VIEW_H - 258, "", { ...font, fontSize: "21px", wordWrap: { width: 860 }, lineSpacing: 6, strokeThickness: 3 }).setDepth(5);
     this.dlgMore = this.add.text(VIEW_W / 2 + 420, VIEW_H - 196, "▼", { ...font, fontSize: "18px", color: "#ffd36b", strokeThickness: 3 }).setOrigin(1, 0.5).setDepth(5);
@@ -93,6 +97,10 @@ export class HudScene extends Phaser.Scene {
       this.bossName.setText(s.bossName).setVisible(true);
     } else this.bossName.setVisible(false);
 
+    // area / zone title card
+    const cd = s.card;
+    this.cardText.setText(cd?.text ?? "").setAlpha(cd?.alpha ?? 0);
+    this.cardSub.setText(cd?.sub ?? "").setAlpha(cd?.alpha ?? 0);
     // dialogue box
     const dl = s.dialog;
     if (dl) {

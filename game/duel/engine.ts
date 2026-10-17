@@ -34,6 +34,9 @@ export class World {
   gate: Rect | null = null;
   gateOpen = true;
   spawns: Record<string, { x: number; y: number }> = {};
+  lights: { x: number; y: number; r: number; color: number }[] = [];
+  shrines: { x: number; y: number; id: string }[] = [];
+  lore: { x: number; y: number; text: string }[] = [];
   arena!: Rect;
 
   constructor(map: Phaser.Tilemaps.Tilemap) {
@@ -45,6 +48,11 @@ export class World {
     for (const o of map.getObjectLayer("objects")!.objects) {
       if (o.type === "spawn") this.spawns[o.name] = { x: o.x!, y: o.y! };
       if (o.type === "gate") this.gate = { l: o.x! - 6 * TILE, r: o.x! + 6 * TILE, t: o.y! - TILE, b: o.y! + TILE };
+      const props: Record<string, unknown> = {};
+      for (const pr of (o.properties ?? []) as { name: string; value: unknown }[]) props[pr.name] = pr.value;
+      if (o.type === "light") this.lights.push({ x: o.x!, y: o.y!, r: Number(props.radius ?? 140), color: parseInt(String(props.color ?? "#ffffff").replace("#", ""), 16) });
+      if (o.type === "shrine") this.shrines.push({ x: o.x!, y: o.y!, id: o.name });
+      if (o.type === "lore") this.lore.push({ x: o.x!, y: o.y!, text: String(props.text ?? "") });
       if (o.type === "arena") this.arena = { l: o.x!, t: o.y!, r: o.x! + o.width!, b: o.y! + o.height! };
     }
   }

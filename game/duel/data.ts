@@ -135,6 +135,7 @@ export interface BossDef {
   tint?: number; // constant body tint (the Shade)
   training?: boolean; // cannot die, scripted by the tutorial, shows timing rings
   brain?: "jev" | "rules"; // default jev
+  area?: string; // where it is fought (default "monastery"); the tests/dev mode keep everything in the monastery map
   nativeDir?: 1 | -1; // which way the art faces (default right)
   anchorX?: number; // torso centre in the sprite frame, when the weapon skews the bounding box
   music: string; // key in manifest.music
@@ -239,6 +240,7 @@ export const GOLEM: BossDef = {
   name: "MECHA-STONE GOLEM",
   title: "Heart of the Ruin",
   prefix: "golem",
+  area: "foundry",
   scale: 2.2,
   headY: 104,
   segments: 2,
@@ -300,6 +302,40 @@ export const GOLEM: BossDef = {
     close: [["STONE_FIST", 40], ["GUARD", 18], ["BACKSTEP", 12], ["ARM_SHOT", 15], ["ARMOR_UP", 10], ["CIRCLE", 5]],
     mid: [["ARM_SHOT", 35], ["LASER", 20], ["APPROACH", 35], ["STONE_FIST", 10]],
     far: [["LASER", 35], ["ARM_SHOT", 35], ["APPROACH", 30]],
+  },
+};
+
+export interface AreaDef {
+  id: string;
+  name: string;
+  map: string; // Phaser tilemap key (see createDuelGame.ts)
+  groundTint: number;
+  wallTint: number;
+  bg: string;
+  ambient: { alpha: number; color: number }; // how dark the area is, and its shade of dark
+  music: string;
+  stars?: boolean;
+  zones: { id: string; name: string; sub: string; yMin: number; yMax: number }[]; // by tile row, first match wins
+}
+
+export const AREAS: Record<string, AreaDef> = {
+  monastery: {
+    id: "monastery", name: "THE HOLLOW MONASTERY", map: "duel_map", groundTint: 0xc9b3a4, wallTint: 0xffffff, bg: "#0b0d12",
+    ambient: { alpha: 0.5, color: 0x0a0b14 }, music: "temple",
+    zones: [
+      { id: "hall", name: "HALL OF SPEARS", sub: "the guard still stands", yMin: 0, yMax: 33 },
+      { id: "courtyard", name: "THE COURTYARD", sub: "where the sword master waits", yMin: 34, yMax: 99 },
+    ],
+  },
+  foundry: {
+    id: "foundry", name: "THE FOUNDRY", map: "foundry_map", groundTint: 0x9d7f70, wallTint: 0xc7a695, bg: "#0b0706",
+    ambient: { alpha: 0.6, color: 0x140703 }, music: "castle",
+    zones: [{ id: "foundry", name: "THE FOUNDRY", sub: "the Stone Heart still beats", yMin: 0, yMax: 99 }],
+  },
+  summit: {
+    id: "summit", name: "THE SUMMIT", map: "summit_map", groundTint: 0x8f90b4, wallTint: 0xa6a8cf, bg: "#04050e", stars: true,
+    ambient: { alpha: 0.5, color: 0x050a1c }, music: "final",
+    zones: [{ id: "summit", name: "THE SUMMIT", sub: "the Reaper waits at the top of every story", yMin: 0, yMax: 99 }],
   },
 };
 
