@@ -10,6 +10,8 @@ import { BOSSES, ENCOUNTERS, GENERIC_ACTIONS, type BossDef } from "./bosses";
 import { BossBrain, Telemetry, type Decision, type Snapshot } from "./brain";
 import { Fighter } from "./fighter";
 import { Sfx } from "./sfx";
+import { addRecord, loadStats, saveStats, type BrainTag, type FightRecord } from "./stats";
+import { deleteSave, loadSave, newRun, writeSave, type RunSave } from "./save";
 import { GameInput, type InputFrame } from "./input";
 import { loadMemory, memoryFor, profile, remember, saveMemory, type MemoryStore } from "./memory";
 import { MashRun, QteRun, type DeathblowGrade } from "./qte";
@@ -68,6 +70,10 @@ export class ArenaScene extends Phaser.Scene {
   private hud!: Phaser.GameObjects.Graphics;
   private texts: Record<string, Phaser.GameObjects.Text> = {};
   sfx!: Sfx;
+  /** menu: title backdrop (no input, AI idle, HUD hidden); play: the fight */
+  mode: "menu" | "play" = "play";
+  run: RunSave | null = null;
+  private fight = { brain: "jev" as BrainTag, mixed: false, hp0: 100 };
   inp!: GameInput;
   frame!: InputFrame;
   private manifest!: ArenaManifest;
@@ -88,6 +94,7 @@ export class ArenaScene extends Phaser.Scene {
   create() {
     this.manifest = this.registry.get("manifest") as ArenaManifest;
     this.dev = new URLSearchParams(window.location.search).has("dev");
+    this.mode = this.dev ? "play" : "menu";
     this.settings = loadSettings();
     this.cameras.main.setBackgroundColor("#101a14");
     this.vfx = new Vfx(this, this.manifest.vfx);
@@ -113,11 +120,13 @@ export class ArenaScene extends Phaser.Scene {
     t("qtekey", VIEW_W / 2, 150, 34, "#ffffff", 0.5);
     t("qtemsg", VIEW_W / 2, 110, 16, "#ffd166", 0.5);
     this.texts.help.setText("WASD move   J/click attack (press again in the chain window)   Space guard (tap just before a hit = PARRY)   Shift roll   E flame burst (2 spirit)" + (this.dev ? "   P ai  O/I enemy attacks  R reset" : "   R reset"));
-    this.game.events.on("arena:settings", () => {
-      this.settings = loadSettings();
-      this.inp.setKeymap(this.settings.keymap);
-    });
+    this.game.events.on("arena:settings", () => this.applySettings());
+    this.brain.mode = this.settings.brain;
     this.reset();
+    if (this.mode === "menu") {
+      this.e.auto = false;
+      this.setHudVisible(false);
+    }
     this.hooks?.onBoss?.(this.boss.name);
     if (process.env.NODE_ENV !== "production") (window as unknown as { __arena?: ArenaScene; __bosses?: typeof BOSSES }).__arena = this;
     if (process.env.NODE_ENV !== "production") (window as unknown as { __bosses?: typeof BOSSES; __areas?: typeof AREAS }).__bosses = BOSSES;
@@ -140,6 +149,8 @@ export class ArenaScene extends Phaser.Scene {
     Object.assign(this.e, { hp: this.boss.hp, posture: 0, mode: "idle", atk: null, hitDone: [], thinkAt: 1200, cd: {}, recoilUntil: 0, brokenUntil: 0, poiseUntil: 0, lastHitAt: -1e9, dash: 0, reverseFrames: 0, reversedAttack: "", strikeAt: 0, action: null, lastActions: [], gate: null, resumeAt: 0, feinting: false, phase2: false });
     this.telemetry.reset();
     this.brain.reset();
+    this.brain.mode = this.settings.brain; // every new fight starts on the brain chosen in Settings (F still swaps it mid-fight)
+    this.fight = { brain: this.brain.mode, mixed: false, hp0: HERO.hp };
     this.gateToken++;
     this.standingStill = 0;
     this.remembered = false;
@@ -171,10 +182,12 @@ export class ArenaScene extends Phaser.Scene {
     }
     this.now += dt;
     this.frame = this.inp.poll();
+    if (this.mode === "menu") this.frame = { dir: { x: 0, y: 0, any: false }, attack: false, guard: false, roll: false, skill: false, guardHeld: false, pause: false, pad: false };
+    else if (this.run && this.e.mode !== "dead" && this.p.mode !== "dead") this.run.playMs += raw;
     if (this.frame.pause) this.hooks?.onPause?.();
     if (Phaser.Input.Keyboard.JustDown(this.keys.R)) this.reset();
     if (Phaser.Input.Keyboard.JustDown(this.keys.P)) this.e.auto = !this.e.auto;
-    if (Phaser.Input.Keyboard.JustDown(this.keys.F)) this.popup(this.enemy.x, this.enemy.y - 170, `brain: ${this.brain.toggle() === "jev" ? "JEV" : "RULES"}`, "#58a6ff");
+    if (Phaser.Input.Keyboard.JustDown(this.keys.F) && this.mode === "play") this.toggleBrain();
     if (Phaser.Input.Keyboard.JustDown(this.keys.N) && this.e.mode === "dead") this.nextBoss();
     if (Phaser.Input.Keyboard.JustDown(this.keys.O)) this.forceEnemyAttack("SLASH");
     if (Phaser.Input.Keyboard.JustDown(this.keys.I)) this.forceEnemyAttack("TWIN");
@@ -665,10 +678,11 @@ export class ArenaScene extends Phaser.Scene {
     this.area = new AreaView(this, def);
     if (this.sfx && this.manifest.music) this.sfx.playMusic(def.music, 0.25);
     this.note("area", { id: def.id });
-    if (this.dev && new URLSearchParams(window.location.search).has("nocard")) return;
+    if (this.mode === "menu" || (this.dev && new URLSearchParams(window.location.search).has("nocard"))) return;
     const t1 = this.add.text(VIEW_W / 2, 230, def.name, { fontFamily: "monospace", fontSize: "34px", color: "#f5e6c8", stroke: "#000", strokeThickness: 5 }).setOrigin(0.5).setDepth(2500).setAlpha(0);
     const t2 = this.add.text(VIEW_W / 2, 270, def.subtitle, { fontFamily: "monospace", fontSize: "14px", color: "#cdbf9f", stroke: "#000", strokeThickness: 3 }).setOrigin(0.5).setDepth(2500).setAlpha(0);
-    this.tweens.add({ targets: [t1, t2], alpha: 1, duration: 450, hold: 1500, yoyo: true, onComplete: () => (t1.destroy(), t2.destroy()) });
+    const t3 = this.add.text(VIEW_W / 2, 300, `"${this.boss.intro}"`, { fontFamily: "monospace", fontSize: "13px", fontStyle: "italic", color: "#e8d9b0", stroke: "#000", strokeThickness: 3 }).setOrigin(0.5).setDepth(2500).setAlpha(0);
+    this.tweens.add({ targets: [t1, t2, t3], alpha: 1, duration: 450, hold: 1700, yoyo: true, onComplete: () => (t1.destroy(), t2.destroy(), t3.destroy()) });
   }
 
   /** Switch to another boss and restart the fight. */
@@ -694,6 +708,83 @@ export class ArenaScene extends Phaser.Scene {
   private onDecision(d: Decision) {
     this.hooks?.onDecision?.(d);
     this.note("decision", { kind: d.kind, choice: d.choice, source: d.source, ms: d.latencyMs, error: d.error });
+  }
+
+  setHudVisible(v: boolean) {
+    this.hud.setVisible(v);
+    for (const t of Object.values(this.texts)) t.setVisible(v);
+  }
+
+  toggleBrain() {
+    const m = this.brain.toggle();
+    this.fight.mixed = true;
+    this.popup(this.enemy.x, this.enemy.y - 170, `brain: ${m === "jev" ? "JEV" : "RULES"}`, "#58a6ff");
+    this.hooks?.onBrain?.(m);
+  }
+
+  /** Called once when a fight ends: learn from it, record it for the Jev-vs-rules comparison, advance the run, tell the UI. */
+  private endFight(won: boolean) {
+    if (this.remembered) return;
+    this.commitMemory(won);
+    const v = Object.values(this.telemetry.vsMove);
+    const sum = (f: (m: (typeof v)[number]) => number) => v.reduce((s, m) => s + f(m), 0);
+    const st = this.brain.stats;
+    const rec: FightRecord = {
+      boss: this.boss.id, brain: this.fight.mixed ? "mixed" : this.fight.brain, won, ms: Math.round(this.now), hpLost: Math.round(this.fight.hp0 - this.p.hp),
+      thrown: sum((m) => m.thrown), deflected: sum((m) => m.deflected), countered: sum((m) => m.countered), blocked: sum((m) => m.blocked), dodged: sum((m) => m.dodged), hit: sum((m) => m.hit),
+      decisions: { jev: st.jev.n, rules: st.rules.n, fallback: st.fallback.n }, jevMs: st.jev.ms, at: Date.now(),
+    };
+    saveStats(addRecord(loadStats(), rec));
+    const run = this.run;
+    let final = false;
+    if (run) {
+      if (won) {
+        run.cleared.push(this.boss.id);
+        run.bossIndex = Math.min(run.bossIndex + 1, ENCOUNTERS.length);
+        final = run.bossIndex >= ENCOUNTERS.length;
+        run.finished = final;
+      } else run.deaths++;
+      writeSave(run);
+    }
+    this.note("fightEnd", { won, boss: this.boss.id, brain: rec.brain });
+    // a beat of silence and the last popup before the UI takes over
+    this.time.delayedCall(won ? 1800 : 1400, () => this.hooks?.onFight?.({ record: rec, won, boss: this.boss.id, bossName: this.boss.name, outro: this.boss.outro, final, deaths: run?.deaths ?? 0, playMs: run?.playMs ?? 0 }));
+  }
+
+  // ---- run control, called by the React shell (createArenaGame's api)
+  startRun(slot: number, fresh: boolean) {
+    if (fresh) deleteSave(slot);
+    this.run = loadSave(slot) ?? newRun(slot);
+    if (fresh || this.run.finished) this.run = newRun(slot);
+    writeSave(this.run);
+    this.mode = "play";
+    this.brain.mode = this.settings.brain;
+    this.setHudVisible(true);
+    this.loadBoss(ENCOUNTERS[Math.min(this.run.bossIndex, ENCOUNTERS.length - 1)]);
+    this.e.auto = true;
+  }
+  /** After a victory: the next boss of the run (or back to the first when the run is over and replayed). */
+  continueRun() {
+    const i = this.run ? this.run.bossIndex : ENCOUNTERS.indexOf(this.boss.id) + 1;
+    this.loadBoss(ENCOUNTERS[i % ENCOUNTERS.length]);
+    this.e.auto = true;
+  }
+  retry() {
+    this.reset();
+    this.e.auto = true;
+  }
+  toTitle() {
+    this.mode = "menu";
+    this.run = null;
+    this.setHudVisible(false);
+    this.loadBoss("mb");
+    this.e.auto = false;
+  }
+  applySettings() {
+    this.settings = loadSettings();
+    this.inp.setKeymap(this.settings.keymap);
+    if (!this.settings.music) this.sfx.stopMusic();
+    else if (this.manifest.music) this.sfx.playMusic(AREAS[this.boss.area].music, 0.25);
   }
 
   private commitMemory(won: boolean) {
@@ -1014,7 +1105,7 @@ export class ArenaScene extends Phaser.Scene {
     this.enemy.play(this.boss.clips.death);
     this.popup(this.enemy.x, this.enemy.y - 150, "VICTORY  (N: next)", "#ffd166");
     this.sfx.deathblow();
-    this.commitMemory(true);
+    this.endFight(true);
     this.note("enemyDead");
   }
   private killPlayer() {
@@ -1023,7 +1114,7 @@ export class ArenaScene extends Phaser.Scene {
     this.player.play(HERO_CLIPS.death);
     this.popup(this.player.x, this.player.y - 150, "YOU DIED (R)", "#ff6b6b");
     this.sfx.hurt();
-    this.commitMemory(false);
+    this.endFight(false);
     this.note("playerDead");
   }
 

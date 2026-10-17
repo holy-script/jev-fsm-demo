@@ -11,6 +11,34 @@ export interface ArenaHooks {
   onLog?: (line: string) => void;
   /** the pad's Start button (or any in-game pause request) */
   onPause?: () => void;
+  /** a fight ended (after a short pause); the shell shows the victory / defeat / ending screen */
+  onFight?: (r: FightResult) => void;
+  onBrain?: (mode: "jev" | "rules") => void;
+}
+
+export interface FightResult {
+  record: import("./stats").FightRecord;
+  won: boolean;
+  boss: string;
+  bossName: string;
+  outro: string;
+  /** the run is over (the last boss fell) */
+  final: boolean;
+  deaths: number;
+  playMs: number;
+}
+
+/** What the React shell can ask of the running game. */
+export interface ArenaApi {
+  start: (slot: number, fresh: boolean) => void;
+  next: () => void;
+  retry: () => void;
+  pause: () => void;
+  resume: () => void;
+  toTitle: () => void;
+  settingsChanged: () => void;
+  toggleBrain: () => void;
+  clearMemory: () => void;
 }
 
 /** Loads arena-assets/manifest.json (written by tools/prep_arena_assets.py), then every sheet it names, then starts the arena. */
@@ -40,7 +68,7 @@ class BootScene extends Phaser.Scene {
   }
 }
 
-export function createArenaGame(parent: HTMLElement, hooks: ArenaHooks) {
+export function createArenaGame(parent: HTMLElement, hooks: ArenaHooks): { destroy: () => void; api: ArenaApi } {
   const game = new Phaser.Game({
     type: Phaser.AUTO,
     parent,
@@ -56,5 +84,35 @@ export function createArenaGame(parent: HTMLElement, hooks: ArenaHooks) {
   game.scene.add("boot", BootScene, true, hooks);
   game.scene.add("arena", ArenaScene, false);
   if (process.env.NODE_ENV !== "production") (window as unknown as { __game?: Phaser.Game }).__game = game;
-  return () => game.destroy(true);
+  const scene = () => game.scene.getScene("arena") as ArenaScene;
+  const api: ArenaApi = {
+    start: (slot, fresh) => scene().startRun(slot, fresh),
+    next: () => scene().continueRun(),
+    retry: () => scene().retry(),
+    pause: () => {
+      game.scene.pause("arena");
+      game.sound.pauseAll();
+    },
+    resume: () => {
+      game.scene.resume("arena");
+      game.sound.resumeAll();
+    },
+    toTitle: () => {
+      game.scene.resume("arena");
+      game.sound.resumeAll();
+      scene().toTitle();
+    },
+    settingsChanged: () => game.events.emit("arena:settings"),
+    toggleBrain: () => scene().toggleBrain(),
+    clearMemory: () => {
+      try {
+        localStorage.removeItem("arena.memory");
+        localStorage.removeItem("arena.stats");
+      } catch {
+        /* ignore */
+      }
+      scene().memory = {};
+    },
+  };
+  return { destroy: () => game.destroy(true), api };
 }

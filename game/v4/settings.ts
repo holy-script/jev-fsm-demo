@@ -1,4 +1,4 @@
-import { DEFAULT_KEYMAP, normaliseKeymap, type Keymap } from "./input";
+import { DEFAULT_KEYMAP, normaliseKeymap, type Keymap } from "./keymap";
 
 /** Player settings (localStorage "arena.settings"; ?qte= overrides for tests). */
 export type QteMode = "on" | "assist" | "off";

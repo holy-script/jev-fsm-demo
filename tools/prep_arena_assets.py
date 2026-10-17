@@ -189,7 +189,9 @@ if fm_dir and rr_dir:
     n2 = stamps("fmp", os.path.join(fm_dir, "Props.png"), min_area=120, dilate=1)
     n3 = stamps("rrp", os.path.join(rr_dir, "Props.png"), min_area=120, dilate=1)
     n4 = stamps("rrw", os.path.join(rr_dir, "Wall.png"), min_area=800, dilate=1)
-    print(f"env stamps: tileset {n1}, fm props {n2}, rr props {n3}, rr walls {n4}")
+    ui_dir = os.path.dirname(find(os.path.join(P4, "pixel-ui-pack", "**", "Ui.png")) or "")
+    n5 = stamps("ui", os.path.join(ui_dir, "Ui.png"), min_area=500, dilate=2) if ui_dir else 0     # panels, scrolls, banners, icons (immunitys Pixel RPG UI)
+    print(f"env stamps: tileset {n1}, fm props {n2}, rr props {n3}, rr walls {n4}, ui {n5}")
     # seamless fills: 32x32 interior tiles cut from the big opaque areas
     def tile(path, tx, ty, name, size=32):
         im = Image.open(path).convert("RGBA").crop((tx * 32, ty * 32, tx * 32 + size, ty * 32 + size))
