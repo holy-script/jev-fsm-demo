@@ -48,7 +48,9 @@ export interface BeamDef {
 }
 
 export interface MoveDef {
-  kind?: "melee" | "projectile" | "beam" | "buff"; // default melee
+  kind?: "melee" | "projectile" | "beam" | "buff" | "pillars" | "blink"; // default melee
+  pillars?: { frame: number; count: number[]; delayMs: number; radius: number; damage: number; posture: number }; // ground strikes marked under/around the player (count per boss segment); roll or step out
+  blink?: { frame: number }; // vanish and reappear behind the player
   spawns?: SpawnDef[]; // projectile moves
   spawnsP2?: SpawnDef[]; // replaces spawns in phase 2
   beam?: BeamDef;
@@ -316,6 +318,87 @@ export const GOLEM: BossDef = {
   },
 };
 
+export const BRINGER: BossDef = {
+  id: "bringer",
+  speaker: "THE BRINGER OF DEATH",
+  briefing: ["The Summit. He waits at the top of every story. He has three lives' worth of patience.", "He blinks behind you: turn and guard. Shadow pillars mark the ground first: roll or step out when they swell. His reaping sweep cannot be blocked: roll it."],
+  intro: ["I have waited at the top of every story.", "Every hand that climbed here held a sword. Every one fell.", "Dance with me, little blade. I will remember how you move."],
+  outro: ["...So. The dance ends.", "Death is only the last partner.", "Go down the mountain, and let the dust forget."],
+  name: "BRINGER OF DEATH",
+  title: "The Last Partner",
+  prefix: "bod",
+  area: "summit",
+  scale: 1.6,
+  headY: 90,
+  segments: 3,
+  segmentHp: 125,
+  maxPosture: 100,
+  speed: 70,
+  radius: 11,
+  nativeDir: -1,
+  anchorX: 106,
+  anims: { idle: "idle", walk: "walk", hit: "hit", block: "block", dead: "dead" },
+  guardLoop: false,
+  music: "final",
+  persona:
+    "Death himself, patient and elegant. He fights like a dance partner who is also a predator: scythe cuts in rhythm, an unblockable reaping sweep, soul bolts from range, pillars of shadow that punish standing still, and a blink that puts him behind the player. He has three lives. He studies the player: against a roller he uses pillars and the sweep timed to the roll, against a turtle he blinks and sweeps, against an aggressor he blinks away and bolts. In later lives he is faster and never repeats himself.",
+  actionDesc: {
+    APPROACH: "Glide toward the player to close the distance.",
+    BACKSTEP: "Drift backward to reopen the distance for bolts and pillars.",
+    CIRCLE: "Circle the player slowly, changing the angle.",
+    WAIT: "Stand still and watch the player. Reads their habits.",
+    GUARD: "Lower the scythe into a brief guard.",
+  },
+  dummyKeys: ["SCYTHE", "REAP", "SOUL_BOLT", "DARK_PILLARS", "BLINK"],
+  moves: {
+    SCYTHE: {
+      id: "SCYTHE", cooldown: 1800, label: "Scythe cut", reach: 100,
+      desc: "A wide scything cut with a clear wind-up. Blockable and deflectable. Safe and rhythmic; the follow-up decides the exchange.",
+      anim: "atkA", fps: 12,
+      hits: [{ frames: [4, 5], type: "normal", damage: 20, posture: 22, deflectPosture: 16, shape: cone(92, 62) }],
+      holds: [{ frame: 2, ms: 520 }], leadBeats: 1.5, grid: 1, lunge: [{ frames: [2, 4], speed: 90 }],
+      gates: [{ after: 0, at: "end", default: "END", options: [
+        { id: "END", desc: "Stop and recover. Safe, but gives the player a turn." },
+        { id: "REAP", desc: "Chain straight into the unblockable reaping sweep. Punishes a player who blocked or deflected and stayed close." },
+        { id: "BLINK", desc: "Vanish and reappear behind the player. Punishes a player who started a riposte or stayed put." },
+        { id: "SOUL_BOLT", desc: "Fire a soul bolt point-blank after the cut.", phase2: true },
+      ] }],
+    },
+    REAP: {
+      id: "REAP", cooldown: 4200, label: "Reaping sweep", reach: 104,
+      desc: "A slow full-circle sweep of the scythe that cannot be blocked or deflected. The player must roll through it or step out of its reach. Punishes turtling behind guard and standing close.",
+      anim: "atkA", fps: 10,
+      hits: [{ frames: [4, 4], type: "sweep", damage: 24, posture: 26, deflectPosture: 0, shape: { kind: "circle", range: 98 } }],
+      holds: [{ frame: 2, ms: 700 }], leadBeats: 2, grid: 1,
+    },
+    SOUL_BOLT: {
+      id: "SOUL_BOLT", cooldown: 2800, label: "Soul bolt", reach: 360, kind: "projectile",
+      desc: "Hurl a bolt of soul fire in a straight line. Can be blocked, rolled through, or deflected back at you for posture damage on you. In later lives he fires two in a row. Good at mid to long range to force a reaction.",
+      anim: "cast", fps: 10, hits: [],
+      holds: [{ frame: 5, ms: 420 }], leadBeats: 1.5, grid: 1,
+      spawns: [{ frame: 7, speed: 215, damage: 15, posture: 20, deflectPosture: 18 }],
+      spawnsP2: [{ frame: 7, speed: 215, damage: 15, posture: 20, deflectPosture: 18 }, { frame: 8, speed: 250, damage: 15, posture: 20, deflectPosture: 18 }],
+    },
+    DARK_PILLARS: {
+      id: "DARK_PILLARS", cooldown: 6500, label: "Pillars of shadow", reach: 340, kind: "pillars",
+      desc: "Marks the ground around and under the player with purple circles that swell, then strike down after about a second. Unblockable, but easy to dodge by rolling or stepping out once the circles swell. 2 pillars in the first life, 3 in the second, 4 in the last. Punishes a player who stands still, turtles, or fights from one spot.",
+      anim: "cast", fps: 10, hits: [],
+      holds: [{ frame: 5, ms: 480 }], leadBeats: 1.5, grid: 1,
+      pillars: { frame: 7, count: [2, 3, 4], delayMs: 1100, radius: 34, damage: 22, posture: 22 },
+    },
+    BLINK: {
+      id: "BLINK", cooldown: 5000, label: "Blink", reach: 360, kind: "blink",
+      desc: "Vanish and reappear right behind the player, then act at once. Does no damage itself, but turns the player's back to him and breaks any distance. A fine answer to a player who keeps range, to one who is mid-riposte, or to a stalemate.",
+      anim: "cast", fps: 11, hits: [], endFrame: 7, blink: { frame: 1 },
+    },
+  },
+  weights: {
+    close: [["SCYTHE", 34], ["REAP", 16], ["BLINK", 14], ["DARK_PILLARS", 12], ["SOUL_BOLT", 10], ["BACKSTEP", 10], ["CIRCLE", 4]],
+    mid: [["SOUL_BOLT", 25], ["DARK_PILLARS", 25], ["APPROACH", 35], ["BLINK", 15]],
+    far: [["SOUL_BOLT", 30], ["DARK_PILLARS", 30], ["APPROACH", 25], ["BLINK", 15]],
+  },
+};
+
 export interface AreaDef {
   id: string;
   name: string;
@@ -351,7 +434,7 @@ export const AREAS: Record<string, AreaDef> = {
 };
 
 /** The tests and dev mode use BOSSES directly; the real game plays ENCOUNTERS (tutorial first). */
-export const BOSSES: BossDef[] = [CAPTAIN, GOLEM];
+export const BOSSES: BossDef[] = [CAPTAIN, GOLEM, BRINGER];
 
 /** The Sparring Shade: the Captain's moves, telegraphed 1.9x slower and hitting lightly, driven by the tutorial script. It cannot die. */
 export const SHADE: BossDef = (() => {
@@ -418,7 +501,7 @@ export const GRUNT_SPEAR: BossDef = {
   weights: { close: [["JAB", 45], ["STAB", 25], ["BACKSTEP", 20], ["CIRCLE", 10]], mid: [["STAB", 35], ["JAB", 30], ["APPROACH", 35]], far: [["APPROACH", 1]] },
 };
 
-export const ENCOUNTERS: BossDef[] = [SHADE, GRUNT_SWORD, GRUNT_SPEAR, CAPTAIN, GOLEM];
+export const ENCOUNTERS: BossDef[] = [SHADE, GRUNT_SWORD, GRUNT_SPEAR, CAPTAIN, GOLEM, BRINGER];
 
 export const GLYPH: Record<AtkType, { color: number; label: string } | null> = {
   beam: { color: 0xff8a2b, label: "!" },

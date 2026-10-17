@@ -25,6 +25,7 @@ export interface HudState {
   objective: { title: string; text: string; progress?: string; hint?: string } | null;
 }
 interface Proj { x: number; y: number; vx: number; vy: number; spr: Phaser.GameObjects.Sprite; dmg: number; post: number; defl: number; moveId: string; reflected: boolean; consumed: boolean; dodged: boolean; born: number }
+interface Pillar { x: number; y: number; t0: number; hitAt: number; r: number; dmg: number; post: number; moveId: string; report: boolean; spr: Phaser.GameObjects.Sprite; done: boolean }
 interface Beam { x: number; y: number; ang: number; until: number; len: number; half: number; spr: Phaser.GameObjects.Sprite; dmg: number; post: number; moveId: string; hit: boolean; dodged: boolean }
 interface GateRt { def: GateDef; requested: boolean; asking: boolean; ans: string | null; applied: boolean }
 const GATE_WAIT = 450; // how long a poised boss waits for Jev's branch answer before taking the default
@@ -44,8 +45,9 @@ const FPS: Record<string, number> = {
   vfx_hit01: 28, vfx_hit03: 28, vfx_hit05: 28, vfx_impact01: 30, vfx_break01: 28, vfx_blood: 22, vfx_shards: 26, vfx_splash: 28, vfx_smoke: 22, vfx_heal: 20,
   sk_idle: 5, sk_walk: 9, sk_atkA: 14, sk_atkB: 12, sk_hit: 12, sk_dead: 8, sp_idle: 5, sp_walk: 9, sp_atkA: 14, sp_atkB: 14, sp_hit: 12, sp_dead: 8,
   golem_idle: 5, golem_glow: 10, golem_arm: 12, golem_block: 12, golem_hit: 10, golem_melee: 12, golem_laser: 10, golem_armor: 10, golem_dead: 8, fx_beam: 14, fx_fist: 14,
+  bod_idle: 7, bod_walk: 9, bod_atkA: 12, bod_cast: 10, bod_hit: 10, bod_dead: 7, bod_block: 8, fx_spell: 12,
 };
-const LOOP = new Set(["hero_idle", "hero_walk", "hero_run", "hero_block", "cap_idle", "cap_walk", "golem_idle", "sk_idle", "sk_walk", "sp_idle", "sp_walk"]);
+const LOOP = new Set(["hero_idle", "hero_walk", "hero_run", "hero_block", "cap_idle", "cap_walk", "golem_idle", "bod_idle", "bod_walk", "sk_idle", "sk_walk", "sp_idle", "sp_walk"]);
 
 export class DuelScene extends Phaser.Scene {
   private hooks!: DuelHooks;
@@ -87,6 +89,7 @@ export class DuelScene extends Phaser.Scene {
   private projs: Proj[] = [];
   private blades: { x: number; y: number; vx: number; vy: number; born: number }[] = [];
   private beams: Beam[] = [];
+  private pillars: Pillar[] = [];
   private sfx!: Sfx;
   private vfx!: Vfx;
   private afterAt = 0;
@@ -240,8 +243,10 @@ export class DuelScene extends Phaser.Scene {
   private clearEntities() {
     this.projs.forEach((p) => p.spr.destroy());
     this.beams.forEach((p) => p.spr.destroy());
+    this.pillars.forEach((p) => p.spr.destroy());
     this.projs = [];
     this.beams = [];
+    this.pillars = [];
   }
 
   private reset(idx = this.bossIdx) {
@@ -408,6 +413,7 @@ export class DuelScene extends Phaser.Scene {
       this.updateBoss(now, dt);
       this.updateProjectiles(now, dt);
       this.updateBeams(now);
+      this.updatePillars(now);
       this.updateBlades(now, dt);
       this.separate(dt);
       this.checkWake();
@@ -1275,8 +1281,12 @@ export class DuelScene extends Phaser.Scene {
     if (!this.def.kind || this.def.kind === "boss") awardPoint(1);
     if (!save.cleared.includes(this.def.id)) save.cleared.push(this.def.id);
     saveGame();
+    this.boss.sprite.alpha = 1;
     const onward = () => {
-      if (!more) return;
+      if (!more) {
+        if (!this.registry.get("dev")) this.time.delayedCall(900, () => this.showCard("THE DANCE ENDS", `${save.deaths} fallen, and the summit is quiet. R to dance again.`));
+        return;
+      }
       if (this.def.kind === "grunt") this.time.delayedCall(this.def.outro ? 600 : 2600, () => this.nextBoss(15));
       else this.time.delayedCall(this.def.outro ? 1200 : 4200, () => this.openShrine());
     };
@@ -1293,7 +1303,7 @@ export class DuelScene extends Phaser.Scene {
 
   // ------------------------------------------------------------ boss
   private moveType(mv: MoveDef): AtkType {
-    return mv.kind === "beam" ? "beam" : mv.hits[0]?.type ?? "normal";
+    return mv.kind === "beam" ? "beam" : mv.kind === "pillars" ? "sweep" : mv.hits[0]?.type ?? "normal";
   }
   private firstAct(mv: MoveDef) {
     const fs = [...mv.hits.map((h) => h.frames[0]), ...(mv.spawns ?? []).map((x) => x.frame), ...(mv.beam ? [mv.beam.frame] : []), ...(mv.buff ? [mv.buff.frame] : [])];
@@ -1684,6 +1694,14 @@ export class DuelScene extends Phaser.Scene {
       b.spawned[99] = true;
       this.spawnBeam(mv, now);
     }
+    if (mv.pillars && !b.spawned[98] && fr >= mv.pillars.frame) {
+      b.spawned[98] = true;
+      this.spawnPillars(mv, now);
+    }
+    if (mv.blink && !b.spawned[97] && fr >= mv.blink.frame) {
+      b.spawned[97] = true;
+      this.blink();
+    }
     if (mv.buff && !b.buffed && fr >= mv.buff.frame) {
       b.buffed = true;
       b.armorUntil = now + mv.buff.ms;
@@ -1701,8 +1719,63 @@ export class DuelScene extends Phaser.Scene {
     const x = f.x + Math.cos(ang) * (this.def.radius + 8), y = f.y + Math.sin(ang) * (this.def.radius + 8);
     const spr = this.add.sprite(x, y - 20, "fx_fist").setScale(1.25).setDepth(10 + y / 100).setRotation(ang);
     spr.anims.play({ key: "fx_fist", frameRate: 14, repeat: -1 });
+    if (this.def.id === "bringer") spr.setTint(0xb06bff);
     this.projs.push({ x, y, vx: Math.cos(ang) * speed, vy: Math.sin(ang) * speed, spr, dmg: sp.damage, post: sp.posture, defl: sp.deflectPosture, moveId: mv.id, reflected: false, consumed: false, dodged: false, born: this.time.now });
     this.sfx.throwFist();
+  }
+
+  /** Pillars of shadow: marked under the player when the scythe rises, and falling together after delayMs. More of them in later segments. */
+  private spawnPillars(mv: MoveDef, now: number) {
+    const pl = mv.pillars!, n = pl.count[Math.min(this.b.seg, pl.count.length - 1)];
+    const P = this.player;
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2, d = i === 0 ? 0 : 40 + Math.random() * 38;
+      const x = P.x + Math.cos(a) * d, y = P.y + Math.sin(a) * d;
+      const spr = this.add.sprite(x, y, "fx_spell").setOrigin(68 / 140, 1).setScale(1.35).setDepth(10 + y / 100 + 0.3);
+      spr.anims.play({ key: "fx_spell", frameRate: (7 / (pl.delayMs / 1000)), repeat: 0 });
+      this.pillars.push({ x, y, t0: now, hitAt: now + pl.delayMs, r: pl.radius, dmg: pl.damage, post: pl.posture, moveId: mv.id, report: i === 0, spr, done: false });
+    }
+    this.sfx.charge();
+  }
+
+  private updatePillars(now: number) {
+    for (const pl of this.pillars) {
+      if (pl.done) continue;
+      const k = Math.min(1, (now - pl.t0) / (pl.hitAt - pl.t0));
+      this.fx.lineStyle(2, 0xb06bff, 0.35 + 0.5 * k).strokeCircle(pl.x, pl.y, pl.r);
+      this.fx.fillStyle(0x7a2cff, 0.10 + 0.22 * k).fillCircle(pl.x, pl.y, pl.r * (0.35 + 0.65 * k));
+      if (now < pl.hitAt) continue;
+      pl.done = true;
+      const near = this.p.mode !== "dead" && dist(this.player.x, this.player.y, pl.x, pl.y) < pl.r + HERO.radius * 0.6;
+      this.burst(pl.x, pl.y - 10, 14, 0xb06bff, 140, 2.2);
+      this.cameras.main.shake(120, 0.004);
+      if (near && this.isIframes(now)) {
+        if (pl.report) this.outcome(pl.moveId, "dodged");
+      } else if (near) {
+        if (pl.report) this.outcome(pl.moveId, "hit");
+        this.hurtPlayer({ frames: [0, 0], type: "sweep", damage: pl.dmg, posture: pl.post, deflectPosture: 0, shape: { kind: "circle", range: 0 } }, "hit", now);
+      } else if (pl.report) this.outcome(pl.moveId, "missed");
+      this.time.delayedCall(900, () => pl.spr.destroy());
+    }
+    this.pillars = this.pillars.filter((pl) => !pl.done || pl.spr.active !== false);
+  }
+
+  /** Vanish in a swirl of smoke and step out behind the player. */
+  private blink() {
+    const f = this.boss, token = this.b.moveToken;
+    this.vfx.afterimage(f, 0xb06bff, 0.5, 300);
+    this.burst(f.x, f.y - 20, 16, 0x7a2cff, 110, 2);
+    this.tweens.add({ targets: f.sprite, alpha: 0, duration: 140 });
+    this.time.delayedCall(300, () => {
+      if (token !== this.b.moveToken || this.b.mode === "dead") return void (f.sprite.alpha = 1);
+      const a = angleTo(f.x, f.y, this.player.x, this.player.y);
+      const tx = this.player.x + Math.cos(a) * 60, ty = this.player.y + Math.sin(a) * 60;
+      f.x = tx;
+      f.y = ty;
+      f.face = this.player.x >= f.x ? 1 : -1;
+      this.burst(f.x, f.y - 20, 16, 0xb06bff, 110, 2);
+      this.tweens.add({ targets: f.sprite, alpha: 1, duration: 140 });
+    });
   }
 
   private endProjectile(pr: Proj) {
@@ -1902,7 +1975,7 @@ export class DuelScene extends Phaser.Scene {
       b.sounded = true;
       const mt = this.moveType(mv);
       if (mv.kind === "buff") this.sfx.charge();
-      else if (mv.kind !== "beam" && mv.kind !== "projectile") this.sfx.swing(mt === "heavy" || mt === "sweep", true);
+      else if (mv.kind !== "beam" && mv.kind !== "projectile" && mv.kind !== "pillars" && mv.kind !== "blink") this.sfx.swing(mt === "heavy" || mt === "sweep", true);
     }
     for (const l of mv.lunge ?? []) if (!holding && fr >= l.frames[0] && fr <= l.frames[1]) {
       const near = dist(f.x, f.y, this.player.x, this.player.y) > this.def.radius + HERO.radius + 8;
@@ -1943,7 +2016,7 @@ export class DuelScene extends Phaser.Scene {
         if (this.applyGate(g, now) === "abort") return;
       }
       const mt2 = this.moveType(mv);
-      this.endMove(now, this.recoverMs(mt2 === "heavy" || mt2 === "sweep" || mv.kind === "beam" || mv.kind === "buff"));
+      this.endMove(now, mv.kind === "blink" ? 300 : this.recoverMs(mt2 === "heavy" || mt2 === "sweep" || mv.kind === "beam" || mv.kind === "buff"));
     }
   }
 

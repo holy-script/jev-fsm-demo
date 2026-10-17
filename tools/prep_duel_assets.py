@@ -61,6 +61,16 @@ for prefix, folder in (("sk", "1 Enemy"), ("sp", "4 Enemy")):
     for k, pat in {"idle": "idle-*.png", "walk": "walk-*.png", "atkA": "attack-A*.png", "atkB": "attack-B*.png", "hit": "hit-*.png", "dead": "dead-*.png"}.items():
         strip(f"{prefix}_{k}", os.path.join(ED, pat), f"grunts/{prefix}/{k}.png")
 
+# ---- Bringer of Death (final boss): frames are 140x93, the scythe skews the box, so the scene passes anchorX; art faces LEFT
+BOD = os.path.join(ROOT, "assets", "packs", "bringer-of-death-free__Bringer-Of-Death", "Bringer-Of-Death", "Individual Sprite")
+if os.path.isdir(BOD):
+    for k, d in {"idle": "Idle", "walk": "Walk", "atkA": "Attack", "cast": "Cast", "hit": "Hurt", "dead": "Death"}.items():
+        strip(f"bod_{k}", os.path.join(BOD, d, "*.png"), f"bringer/{k}.png")
+    strip("bod_block", os.path.join(BOD, "Cast", "Bringer-of-Death_Cast_[1-5].png"), "bringer/block.png")   # the hunched start of the cast reads as a guard
+    strip("fx_spell", os.path.join(BOD, "Spell", "*.png"), "fx/spell.png")
+else:
+    print("note: Bringer of Death pack not found - the final boss will be missing")
+
 # ---- Mecha-Stone Golem (Darkpixel): a 10x10 grid of 100x100 cells; rows are animations
 GOL = os.path.join(P2, "mecha-golem-free")
 gdir = None
