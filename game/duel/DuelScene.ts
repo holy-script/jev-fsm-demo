@@ -183,7 +183,7 @@ export class DuelScene extends Phaser.Scene {
     this.cameras.main.setBounds(0, 0, this.world.w * TILE, this.world.h * TILE);
     this.cam.x = this.player.x;
     this.cam.y = this.player.y - 20;
-    this.sfx.playMusic("explore", 0.22);
+    this.sfx.playMusic("temple", 0.22);
     this.hud.message = "";
     this.hud.sub = "";
     this.hud.bossVisible = false;
@@ -226,7 +226,7 @@ export class DuelScene extends Phaser.Scene {
     this.locked = true;
     const a = this.world.arena;
     this.cameras.main.setBounds(a.l - 24, a.t - 40, a.r - a.l + 48, a.b - a.t + 60);
-    this.sfx.playMusic("fight", 0.28);
+    this.sfx.playMusic(this.def.music, 0.28);
     this.hud.bossVisible = true;
     this.hud.message = this.def.name;
     this.hud.sub = this.def.title;
@@ -646,7 +646,7 @@ export class DuelScene extends Phaser.Scene {
     const more = this.bossIdx + 1 < BOSSES.length;
     this.hud.message = more ? "DEMISE" : "VICTORY";
     this.hud.sub = more ? `${BOSSES[this.bossIdx + 1].name} stirs…` : "R to fight again";
-    this.sfx.playMusic("explore", 0.22);
+    this.sfx.playMusic("temple", 0.22);
     this.hooks.onLog(`${this.def.name} defeated`);
     if (!save.cleared.includes(this.def.id)) save.cleared.push(this.def.id);
     saveGame();

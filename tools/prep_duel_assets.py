@@ -135,10 +135,22 @@ for i, f in enumerate(clashes, 1):
 for i, f in enumerate(blades, 1):
     convert(f, f"blade{i}")
 
-# ---- music (Ninja Adventure, CC0)
-for k, name in {"fight": "17 - Fight.ogg", "explore": "10 - Dark Castle.ogg"}.items():
-    shutil.copy(os.path.join(NA, "Audio", "Musics", name), os.path.join(OUT, "audio", k + ".ogg"))
-    manifest["music"][k] = f"duel-assets/audio/{k}.ogg"
+# ---- music (Ninja Adventure, CC0). Tempo and first-beat phase are measured by tools/bpm.py so combat can be phase-locked to the track.
+sys.path.insert(0, os.path.join(ROOT, "tools"))
+import bpm as bpmtool
+TRACKS = {
+    "temple": "12 - Temple.ogg",          # tutorial / exploring (90 BPM)
+    "castle": "10 - Dark Castle.ogg",     # quieter exploring (65 BPM)
+    "captain": "17 - Fight.ogg",          # boss 1 (90 BPM)
+    "crypt": "40 - Crypt.ogg",            # boss 2 (80 BPM)
+    "final": "24 - Final Area.ogg",       # final boss (70 BPM)
+}
+for k, name in TRACKS.items():
+    src = os.path.join(NA, "Audio", "Musics", name)
+    shutil.copy(src, os.path.join(OUT, "audio", k + ".ogg"))
+    r = bpmtool.analyse(src)
+    manifest["music"][k] = {"file": f"duel-assets/audio/{k}.ogg", "bpm": r["bpm"], "phase": r["phase"], "conf": r["conf"], "seconds": r["seconds"]}
+    print(f"  music {k:8} {r['bpm']:6.2f} BPM  phase {r['phase']:.3f}s  conf {r['conf']}")
 
 json.dump(manifest, open(os.path.join(OUT, "manifest.json"), "w"), indent=1)
 print(f"ok: {len(manifest['sheets'])} sheets, {len(manifest['audio'])} sfx -> {OUT}")

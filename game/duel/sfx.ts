@@ -268,12 +268,20 @@ export class Sfx {
     this.burst(o, "highpass", 3000, 3000, 0.7, 0.3 * power, 0.001, 0.03);
   }
 
-  // ------------------------------------------------------------------ music
+  // ------------------------------------------------------------------ music + beat clock
+  private musicInfo?: { bpm: number; phase: number };
+  private musicT0 = 0; // AudioContext time at which the track started
+  private beatFallbackT0 = performance.now();
+
   playMusic(name: string, volume = 0.25) {
     this.stopMusic();
-    if (!this.manifest.music[name]) return;
+    const info = this.manifest.music[name];
+    if (!info) return;
     this.music = this.scene.sound.add("music_" + name, { loop: true, volume: this.musicOn && settings.music ? volume : 0 });
     this.music.play();
+    this.musicInfo = { bpm: info.bpm, phase: info.phase };
+    this.musicT0 = this.ctx?.currentTime ?? 0;
+    this.beatFallbackT0 = performance.now();
   }
   stopMusic() {
     this.music?.stop();
@@ -283,5 +291,15 @@ export class Sfx {
   toggleMusic() {
     this.musicOn = !this.musicOn;
     (this.music as Phaser.Sound.WebAudioSound | undefined)?.setVolume(this.musicOn ? 0.25 : 0);
+  }
+  /** Tempo of the current track (BPM), or a default when none is playing. */
+  get bpm() {
+    return this.musicInfo?.bpm ?? 90;
+  }
+  /** Beats elapsed since the track's first beat (fractional). Keeps counting at the track's tempo if the music is muted. */
+  beatPos() {
+    const info = this.musicInfo ?? { bpm: 90, phase: 0 };
+    const sec = this.musicInfo && this.ctx ? this.ctx.currentTime - this.musicT0 : (performance.now() - this.beatFallbackT0) / 1000;
+    return ((sec - info.phase) * info.bpm) / 60;
   }
 }

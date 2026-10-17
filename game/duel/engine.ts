@@ -12,7 +12,7 @@ export interface SheetInfo {
 export interface DuelManifest {
   sheets: Record<string, SheetInfo>;
   audio: Record<string, string>;
-  music: Record<string, string>;
+  music: Record<string, { file: string; bpm: number; phase: number; conf: number; seconds: number }>;
   tiles: { file: string };
 }
 

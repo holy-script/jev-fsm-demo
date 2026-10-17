@@ -24,7 +24,7 @@ class BootScene extends Phaser.Scene {
     this.load.image("duel_tiles", "/" + m.tiles.file);
     this.load.tilemapTiledJSON("duel_map", "/maps/duel_arena.json");
     for (const [k, f] of Object.entries(m.audio)) this.load.audio(k, "/" + f);
-    for (const [k, f] of Object.entries(m.music)) this.load.audio("music_" + k, "/" + f);
+    for (const [k, mu] of Object.entries(m.music)) this.load.audio("music_" + k, "/" + mu.file);
     const dev = typeof window !== "undefined" && new URLSearchParams(window.location.search).has("dev"); // ?dev=1 skips the title (tests)
     this.registry.set("hooks", this.hooks);
     this.load.once("complete", () => (dev ? this.scene.start("duel", this.hooks) : this.scene.start("menu", { mode: "title" })));

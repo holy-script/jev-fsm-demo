@@ -122,6 +122,7 @@ export interface BossDef {
   guardLoop?: boolean; // false: the guard animation plays once and holds its last frame
   stoneGuard?: boolean; // guard is immune to light attacks and kicks; only a heavy breaks it
   noFlinch?: boolean; // hits never interrupt it (it only flashes)
+  music: string; // key in manifest.music
   persona: string; // told to Jev
   actionDesc?: Record<string, string>; // overrides for the generic actions (e.g. GUARD)
   dummyKeys: string[]; // move ids bound to Z X C V B in the training-dummy mode
@@ -148,6 +149,7 @@ export const CAPTAIN: BossDef = {
   speed: 62,
   radius: 9,
   anims: { idle: "idle", walk: "walk", hit: "hit", block: "block", dead: "dead" },
+  music: "captain",
   persona: "A disciplined skeleton duelist with a shield and a heavy cleaver. Its strength is mixing blockable chains with unblockable surprises.",
   dummyKeys: ["SLASH2", "OVERHEAD", "THRUST", "SWEEP", "GRAB"],
   moves: {
@@ -233,6 +235,7 @@ export const GOLEM: BossDef = {
   guardLoop: false,
   stoneGuard: true,
   noFlinch: true,
+  music: "crypt",
   persona:
     "A huge, slow stone construct. It cannot be flinched by normal hits and is dangerous at every range: a crushing fist up close, a deflectable thrown fist at mid range, and a long unblockable laser. Its weakness is posture: deflecting its fist back, or breaking its stone guard with a heavy attack. It wins by controlling space and punishing impatience.",
   actionDesc: {
