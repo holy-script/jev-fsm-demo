@@ -72,13 +72,13 @@ export class Fighter {
   private flash = 0;
   readonly baseScale: number;
 
-  constructor(scene: Phaser.Scene, public prefix: string, sheets: DuelManifest["sheets"], public radius: number, scale = 1) {
+  constructor(scene: Phaser.Scene, public prefix: string, sheets: DuelManifest["sheets"], public radius: number, scale = 1, private nativeDir: 1 | -1 = 1, anchorX?: number) {
     const idle = sheets[`${prefix}_idle`];
-    const ax = (idle.first[0] + idle.first[2]) / 2 - 3;
+    const ax = anchorX ?? (idle.first[0] + idle.first[2]) / 2 - 3;
     const ay = idle.first[3];
     for (const [key, s] of Object.entries(sheets)) {
       if (!key.startsWith(prefix + "_")) continue;
-      this.anchors[key] = s.frameH === idle.frameH ? { ax, ay } : { ax: (s.first[0] + s.first[2]) / 2 - 3, ay: s.first[3] };
+      this.anchors[key] = s.frameH === idle.frameH ? { ax, ay } : { ax: anchorX ?? (s.first[0] + s.first[2]) / 2 - 3, ay: s.first[3] };
     }
     this.baseScale = scale;
     this.sprite = scene.add.sprite(0, 0, `${prefix}_idle`).setScale(scale);
@@ -127,7 +127,7 @@ export class Fighter {
   }
 
   sync() {
-    const flip = this.face < 0;
+    const flip = this.face !== this.nativeDir;
     const key = this.sprite.anims.currentAnim?.key ?? `${this.prefix}_idle`;
     const an = this.anchors[key] ?? this.anchors[`${this.prefix}_idle`];
     const fw = this.sprite.width, fh = this.sprite.height;

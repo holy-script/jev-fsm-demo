@@ -22,8 +22,8 @@ const pos0 = await p.evaluate(() => ({ x: window.__duel.player.x, y: window.__du
 await p.keyboard.down("d"); await p.waitForTimeout(500); await p.keyboard.up("d");
 const pos1 = await p.evaluate(() => ({ x: window.__duel.player.x, y: window.__duel.player.y }));
 check("the world is frozen while the dialogue box is open", Math.abs(pos1.x - pos0.x) < 1 && Math.abs(pos1.y - pos0.y) < 1, { pos0, pos1 });
-await p.waitForTimeout(1500); const typed = (await hud(p)).dlg.text.length; await p.keyboard.press("Enter"); const full = (await hud(p)).dlg.done;
-check("the typewriter reveals text and Enter completes the line", typed > 5 && full === true, { typed, full });
+await p.waitForTimeout(1500); const before = (await hud(p)).dlg; const typed = before.text.length; await p.keyboard.press("Enter"); await p.waitForTimeout(200); const after = (await hud(p)).dlg;
+check("the typewriter reveals text and Enter completes the line (or moves on if it had finished)", typed > 5 && (after.done === true || after.i > before.i), { typed, before: before.i, after: after.i, done: after.done });
 const gateClosed = await p.evaluate(() => window.__duel.world.gateOpen === false); check("the gate north is sealed during the lessons", gateClosed, {});
 
 // play every lesson: Enter through dialogue, satisfy each objective
@@ -70,7 +70,7 @@ while (guard++ < 400) {
 check("all twelve lessons run in order", JSON.stringify(seen) === JSON.stringify(["MOVE", "STRIKE", "BLOCK", "DEFLECT", "RIPOSTE", "SWEEP", "SLIP", "GRAB", "DEATHBLOW", "KICK", "HEAL", "THE TEST"]), seen);
 await p.waitForTimeout(2500);
 const fin = await p.evaluate(() => ({ done: JSON.parse(localStorage.getItem("duel.save")).tutorialDone, gate: window.__duel.world.gateOpen, idx: window.__duel.bossIdx, def: window.__duel.def.id, on: window.__duel.tutorialOn, awake: window.__duel.b.awake }));
-check("finishing opens the gate, saves it, and the Captain waits asleep in the arena", fin.done === true && fin.gate === true && fin.def === "captain" && fin.awake === false && fin.on === false, fin);
+check("finishing opens the gate, saves it, and the first grunt waits asleep in the arena", fin.done === true && fin.gate === true && fin.def === "bone-soldier" && fin.awake === false && fin.on === false, fin);
 await p.close();
 
 // skipping from the pause menu + mercy
@@ -86,6 +86,6 @@ await p.close();
 p = await newGame({ cleared: [], deaths: 0, skills: [], points: 2, tutorialDone: true });
 await p.keyboard.press("Enter"); await p.waitForFunction(() => window.__duel?.player, null, { timeout: 20000 }); await p.waitForTimeout(800);
 const cont = await p.evaluate(() => ({ def: window.__duel.def.id, tut: window.__duel.tutorialOn, npc: !!window.__duel.npc }));
-check("a saved game with the tutorial done starts at the Captain, with no Instructor", cont.def === "captain" && !cont.tut && !cont.npc, cont);
+check("a saved game with the tutorial done starts at the first grunt, with no Instructor", cont.def === "bone-soldier" && !cont.tut && !cont.npc, cont);
 await p.close();
 console.log(errs.join("\n") || "no page errors"); console.log(`${results.filter(Boolean).length}/${results.length} passed`); await b.close();

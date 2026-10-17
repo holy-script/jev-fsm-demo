@@ -114,7 +114,7 @@ export class HudScene extends Phaser.Scene {
       g.lineStyle(1, 0x6b5a3a, 1).strokeRect(26, 92, 350, bottom - 92 + 12);
     }
     const dots = ".".repeat(1 + (Math.floor(this.time.now / 250) % 3));
-    this.brain.setVisible(s.bossVisible).setColor(s.brain === "JEV" ? "#8fd0ff" : "#ffd36b").setText(`BRAIN ${s.brain}${s.thinking ? " thinking" + dots : ""}${s.last ? "   " + s.last : ""}`);
+    this.brain.setVisible(s.bossVisible).setColor((s.brainActual ?? s.brain) === "JEV" ? "#8fd0ff" : "#ffd36b").setText(`BRAIN ${s.brainActual ?? s.brain}${s.thinking ? " thinking" + dots : ""}${s.last ? "   " + s.last : ""}`);
 
     const rp = 0.55 + 0.45 * Math.sin(this.time.now / 90);
     this.riposteText.setVisible(s.riposte).setAlpha(rp);

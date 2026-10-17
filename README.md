@@ -59,3 +59,7 @@ Jev sees your spirit, riposte readiness, unlocked skills and how often you use a
 ### The tutorial
 
 A new game starts in the monastery courtyard with an **Instructor** (a pale spirit) who teaches in RPG-style dialogue boxes: move, strike, block, deflect, riposte, sweep (yellow, low rumble), perilous thrust (red, chime) with the slip, grab (purple, whisper), posture and deathblow, kick, heal, the shrine, any skill you pick, and a final test against the **Sparring Shade**. The Shade is the Captain's moveset telegraphed 1.9x slower and hitting lightly; it cannot die. A timing ring closes on it at the moment of impact (also available as the Assist difficulty's aid). An objective panel shows progress and gives hints when you are stuck; HP never falls below 20 during lessons; Esc > Skip tutorial ends it. The gate north stays sealed until you finish. `node tests/duel/tutorial.mjs` plays it through.
+
+### Encounters
+
+The real game plays: the tutorial (Sparring Shade), the **Bone Soldier** and the **Spear Bearer** (rules-driven skeleton grunts: no Jev calls, no shrine, no skill points; the spear's long thrust is red and perilous), then the **Skeleton Captain** and the **Mecha-Stone Golem** (both driven by Jev, each followed by the shrine). `node tests/duel/grunts.mjs` covers the grunt flow.

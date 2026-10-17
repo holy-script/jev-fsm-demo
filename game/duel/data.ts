@@ -135,6 +135,8 @@ export interface BossDef {
   tint?: number; // constant body tint (the Shade)
   training?: boolean; // cannot die, scripted by the tutorial, shows timing rings
   brain?: "jev" | "rules"; // default jev
+  nativeDir?: 1 | -1; // which way the art faces (default right)
+  anchorX?: number; // torso centre in the sprite frame, when the weapon skews the bounding box
   music: string; // key in manifest.music
   persona: string; // told to Jev
   actionDesc?: Record<string, string>; // overrides for the generic actions (e.g. GUARD)
@@ -321,7 +323,53 @@ export const SHADE: BossDef = (() => {
   };
 })();
 
-export const ENCOUNTERS: BossDef[] = [SHADE, CAPTAIN, GOLEM];
+// ---- grunts: rules-driven skeletons met on the way to the bosses (no shrine, no skill points)
+const gcone = (range: number, half: number): Shape => ({ kind: "cone", range, half });
+
+export const GRUNT_SWORD: BossDef = {
+  id: "bone-soldier", name: "BONE SOLDIER", title: "a sworn blade, long unpaid", kind: "grunt", brain: "rules",
+  prefix: "sk", scale: 1.2, headY: 70, segments: 1, segmentHp: 70, maxPosture: 100, speed: 68, radius: 8, anchorX: 44, nativeDir: 1,
+  anims: { idle: "idle", walk: "walk", hit: "hit", block: "idle", dead: "dead" }, music: "castle", persona: "A simple sword skeleton.",
+  dummyKeys: ["CUT", "CHOP"],
+  moves: {
+    CUT: {
+      id: "CUT", label: "Cut", cooldown: 1400, reach: 76, desc: "A quick sword cut.", anim: "atkA", fps: 14,
+      hits: [{ frames: [3, 5], type: "normal", damage: 14, posture: 14, deflectPosture: 9, shape: gcone(60, 60) }],
+      holds: [{ frame: 2, ms: 360 }], leadBeats: 1.5, grid: 1, lunge: [{ frames: [2, 4], speed: 60 }],
+    },
+    CHOP: {
+      id: "CHOP", label: "Chop", cooldown: 2400, reach: 80, desc: "A slow heavy chop.", anim: "atkB", fps: 12,
+      hits: [{ frames: [3, 4], type: "heavy", damage: 22, posture: 28, deflectPosture: 16, shape: gcone(64, 50) }],
+      holds: [{ frame: 2, ms: 420 }], leadBeats: 2, grid: 0.5, lunge: [{ frames: [2, 4], speed: 70 }],
+    },
+  },
+  weights: { close: [["CUT", 60], ["CHOP", 30], ["BACKSTEP", 6], ["CIRCLE", 4]], mid: [["APPROACH", 70], ["CUT", 20], ["CIRCLE", 10]], far: [["APPROACH", 1]] },
+};
+
+export const GRUNT_SPEAR: BossDef = {
+  id: "spear-bearer", name: "SPEAR BEARER", title: "keeper of the long reach", kind: "grunt", brain: "rules",
+  prefix: "sp", scale: 1.2, headY: 70, segments: 1, segmentHp: 60, maxPosture: 100, speed: 56, radius: 8, anchorX: 45, nativeDir: 1,
+  anims: { idle: "idle", walk: "walk", hit: "hit", block: "idle", dead: "dead" }, music: "castle", persona: "A spear skeleton.",
+  dummyKeys: ["STAB", "JAB"],
+  moves: {
+    STAB: {
+      id: "STAB", label: "Perilous stab", cooldown: 3000, reach: 130, desc: "A long red thrust.", anim: "atkA", fps: 14,
+      hits: [{ frames: [2, 4], type: "thrust", damage: 22, posture: 22, deflectPosture: 0, shape: gcone(120, 12) }],
+      holds: [{ frame: 1, ms: 520 }], leadBeats: 2, grid: 1, lunge: [{ frames: [2, 3], speed: 110 }],
+    },
+    JAB: {
+      id: "JAB", label: "Double jab", cooldown: 1800, reach: 120, desc: "Two quick jabs.", anim: "atkB", fps: 14,
+      hits: [
+        { frames: [2, 3], type: "normal", damage: 10, posture: 12, deflectPosture: 8, shape: gcone(110, 14) },
+        { frames: [7, 8], type: "normal", damage: 10, posture: 12, deflectPosture: 8, shape: gcone(110, 14) },
+      ],
+      holds: [{ frame: 1, ms: 360 }, { frame: 6, ms: 240 }], leadBeats: 1.5, gapBeats: [2], grid: 1,
+    },
+  },
+  weights: { close: [["JAB", 45], ["STAB", 25], ["BACKSTEP", 20], ["CIRCLE", 10]], mid: [["STAB", 35], ["JAB", 30], ["APPROACH", 35]], far: [["APPROACH", 1]] },
+};
+
+export const ENCOUNTERS: BossDef[] = [SHADE, GRUNT_SWORD, GRUNT_SPEAR, CAPTAIN, GOLEM];
 
 export const GLYPH: Record<AtkType, { color: number; label: string } | null> = {
   beam: { color: 0xff8a2b, label: "!" },

@@ -103,7 +103,7 @@ export class MenuScene extends Phaser.Scene {
       this.sub.setText(title ? "a duel that learns" : "");
       this.items = title
         ? [
-            { label: () => "Continue", enabled: () => save.cleared.length > 0 || save.tutorialDone, act: () => this.startGame(), hint: () => save.cleared.length ? `${save.cleared.length} guardian(s) defeated` : "The tutorial is done: onward to the Hall." },
+            { label: () => "Continue", enabled: () => save.cleared.length > 0 || save.tutorialDone, act: () => this.startGame(), hint: () => save.cleared.length ? `${save.cleared.length} foe(s) defeated` : "The tutorial is done: onward to the Hall." },
             { label: () => "New Game", act: () => { resetSave(); this.startGame(); } },
             { label: () => "Settings", act: () => { this.screen = "settings"; this.idx = 0; this.build(); } },
             { label: () => "Credits", act: () => { this.screen = "credits"; this.idx = 0; this.build(); } },

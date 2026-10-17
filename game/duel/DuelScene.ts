@@ -18,7 +18,7 @@ export interface HudState {
   hp: number; posture: number; heals: number;
   bossVisible: boolean; bossName: string; bossHp: number; bossSegs: number; bossSeg: number; bossPosture: number; bossGuard: boolean;
   message: string; sub: string; auto: boolean; music: boolean;
-  brain: "JEV" | "RULES"; thinking: boolean; last: string; bossArmor: boolean;
+  brain: "JEV" | "RULES"; thinking: boolean; last: string; bossArmor: boolean; brainActual?: "JEV" | "RULES";
   spirit: number; maxSpirit: number; riposte: boolean; art: boolean; tool: boolean;
   dialog: { who: string; text: string; done: boolean; i: number; n: number } | null;
   objective: { title: string; text: string; progress?: string; hint?: string } | null;
@@ -41,9 +41,10 @@ const FPS: Record<string, number> = {
   hero_idle: 8, hero_walk: 12, hero_run: 14, hero_block: 8, hero_blockUp: 14, hero_blockHigh: 12, hero_roll: 24, hero_hitA: 12, hero_hitB: 10,
   hero_dead: 8, hero_kick: 16, cap_idle: 6, cap_walk: 8, cap_hit: 12, cap_dead: 7, cap_block: 8, cap_jump: 10,
   vfx_hit01: 28, vfx_hit03: 28, vfx_hit05: 28, vfx_impact01: 30, vfx_break01: 28, vfx_blood: 22, vfx_shards: 26, vfx_splash: 28, vfx_smoke: 22, vfx_heal: 20,
+  sk_idle: 5, sk_walk: 9, sk_atkA: 14, sk_atkB: 12, sk_hit: 12, sk_dead: 8, sp_idle: 5, sp_walk: 9, sp_atkA: 14, sp_atkB: 14, sp_hit: 12, sp_dead: 8,
   golem_idle: 5, golem_glow: 10, golem_arm: 12, golem_block: 12, golem_hit: 10, golem_melee: 12, golem_laser: 10, golem_armor: 10, golem_dead: 8, fx_beam: 14, fx_fist: 14,
 };
-const LOOP = new Set(["hero_idle", "hero_walk", "hero_run", "hero_block", "cap_idle", "cap_walk", "golem_idle"]);
+const LOOP = new Set(["hero_idle", "hero_walk", "hero_run", "hero_block", "cap_idle", "cap_walk", "golem_idle", "sk_idle", "sk_walk", "sp_idle", "sp_walk"]);
 
 export class DuelScene extends Phaser.Scene {
   private hooks!: DuelHooks;
@@ -198,7 +199,7 @@ export class DuelScene extends Phaser.Scene {
     this.bossIdx = idx;
     this.def = this.seq()[idx];
     this.boss?.sprite.destroy();
-    this.boss = new Fighter(this, this.def.prefix, this.man.sheets, this.def.radius, this.def.scale);
+    this.boss = new Fighter(this, this.def.prefix, this.man.sheets, this.def.radius, this.def.scale, this.def.nativeDir ?? 1, this.def.anchorX);
     const home = this.def.training ? this.world.spawns.shade : this.world.spawns.boss;
     this.boss.x = home.x;
     this.boss.y = home.y;
@@ -243,11 +244,11 @@ export class DuelScene extends Phaser.Scene {
   }
 
   /** After a boss falls: heal a little, then the next guardian rises in the same arena. */
-  private nextBoss() {
+  private nextBoss(heal = 40) {
     if (this.p.mode === "dead") return;
-    this.p.hp = Math.min(HERO.maxHp, this.p.hp + 40);
+    this.p.hp = Math.min(HERO.maxHp, this.p.hp + heal);
     this.p.posture = 0;
-    this.p.heals = Math.min(HERO.heals, this.p.heals + 1);
+    if (heal >= 40) this.p.heals = Math.min(HERO.heals, this.p.heals + 1);
     this.clearEntities();
     this.spawnBoss(this.bossIdx + 1);
     this.hud.message = "";
@@ -341,6 +342,7 @@ export class DuelScene extends Phaser.Scene {
     this.hud.riposte = this.time.now < this.p.riposteUntil;
     this.hud.art = has("whirl");
     this.hud.tool = has("blades");
+    this.hud.brainActual = this.def.brain === "rules" ? "RULES" : this.hud.brain;
     this.hud.thinking = this.b.asking || this.b.gates.some((g) => g.asking && !g.applied);
 
     if (this.hitstop > 0) {
@@ -1032,14 +1034,17 @@ export class DuelScene extends Phaser.Scene {
     this.projs = [];
     this.beams = [];
     const more = this.bossIdx + 1 < this.seq().length;
-    this.hud.message = more ? "DEMISE" : "VICTORY";
+    this.hud.message = !more ? "VICTORY" : this.def.kind === "grunt" ? "DEFEATED" : "DEMISE";
     this.hud.sub = more ? `${this.seq()[this.bossIdx + 1].name} stirs…` : "R to fight again";
     this.sfx.playMusic("temple", 0.22);
     this.hooks.onLog(`${this.def.name} defeated`);
-    awardPoint(1);
+    if (!this.def.kind || this.def.kind === "boss") awardPoint(1);
     if (!save.cleared.includes(this.def.id)) save.cleared.push(this.def.id);
     saveGame();
-    if (more) this.time.delayedCall(4200, () => this.openShrine());
+    if (more) {
+      if (this.def.kind === "grunt") this.time.delayedCall(2600, () => this.nextBoss(15));
+      else this.time.delayedCall(4200, () => this.openShrine());
+    }
   }
 
   // ------------------------------------------------------------ boss
@@ -1295,7 +1300,7 @@ export class DuelScene extends Phaser.Scene {
     if (b.decision || b.asking || now < b.nextAsk || this.p.mode === "dead") return;
     const avail = this.availableActions(now);
     const snap = this.snapshot(now);
-    if (this.hud.brain === "RULES") return this.setDecision(rulesIdle(this.def, snap, avail), now);
+    if (this.hud.brain === "RULES" || this.def.brain === "rules") return this.setDecision(rulesIdle(this.def, snap, avail), now);
     b.asking = true;
     b.askedAt = now;
     const id = ++b.askId;
@@ -1574,7 +1579,7 @@ export class DuelScene extends Phaser.Scene {
       g.ans = g.def.default; // training dummy: combos run their default path so they stay predictable
       return;
     }
-    if (this.hud.brain === "RULES") return finish(rulesGate(gate, phase));
+    if (this.hud.brain === "RULES" || this.def.brain === "rules") return finish(rulesGate(gate, phase));
     g.asking = true;
     const token = b.moveToken;
     askGate(this.def, mv, gate, snap, phase, label)

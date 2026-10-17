@@ -55,6 +55,12 @@ cap = {"idle": "idle-*.png", "walk": "walk-*.png", "atkA": "attack-A*.png", "atk
 for k, pat in cap.items():
     strip(f"cap_{k}", os.path.join(E, pat), f"captain/{k}.png")
 
+# ---- grunts (Szadi enemies 1 and 4): sword skeleton "sk", spear skeleton "sp"
+for prefix, folder in (("sk", "1 Enemy"), ("sp", "4 Enemy")):
+    ED = os.path.join(HERO, folder, "PNG")
+    for k, pat in {"idle": "idle-*.png", "walk": "walk-*.png", "atkA": "attack-A*.png", "atkB": "attack-B*.png", "hit": "hit-*.png", "dead": "dead-*.png"}.items():
+        strip(f"{prefix}_{k}", os.path.join(ED, pat), f"grunts/{prefix}/{k}.png")
+
 # ---- Mecha-Stone Golem (Darkpixel): a 10x10 grid of 100x100 cells; rows are animations
 GOL = os.path.join(P2, "mecha-golem-free")
 gdir = None
