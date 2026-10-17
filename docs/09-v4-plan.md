@@ -1,6 +1,6 @@
 # 09. v4 plan: "ARENA" proper demo
 
-Status: **Phase 0 (assets) done, see section 9.** Phase 1 next. Decisions taken with the user: free assets only; v4 is a new route `/arena` in `game/v4/` (v3 `/duel` stays untouched and playable); the setting follows the environment packs (forest, ruined river temple, graveyard), so the v3 monastery/foundry/summit story is rewritten.
+Status: **Phases 0 (assets, section 9) and 1 (engine kernel, section 10) done.** Phase 2 (combat depth, QTE) next. Decisions taken with the user: free assets only; v4 is a new route `/arena` in `game/v4/` (v3 `/duel` stays untouched and playable); the setting follows the environment packs (forest, ruined river temple, graveyard), so the v3 monastery/foundry/summit story is rewritten.
 
 Goal: a polished 10 to 15 minute demo where Jev is visibly the enemy's brain, with a consistent art style, better environments, richer combat (combos, reverse-animation parries, quick-time events) and a real UI.
 
@@ -127,3 +127,25 @@ All 3 attacks have a visible wind-up and the third hit is long (17 to 28 frames)
 **Credits to add before shipping:** chierit (CC BY 4.0), pimen, immunitys (named in the Credits screen).
 
 **Phase 0 exit check:** met. The lab shows every needed character animation, forward and reversed, and the VFX sheets, with correct slicing for the first-use effects.
+
+## 10. Phase 1 results: the engine kernel (route `/arena`, `game/v4/`)
+
+Playable: Fire Knight vs a Metal Bladekeeper training enemy on a flat floor (`/arena`, add `?dev=1` for the debug line). Controls: WASD move, J or click attack, Space/K guard, Shift/L roll, R reset, dev P (toggle enemy AI), O/I (force enemy SLASH/TWIN). Suite: `npm run test:arena` (18 checks, needs `npm run dev`). View is 960x540, sprites at SCALE 2 (hero about 90 px).
+
+| File | Role |
+|---|---|
+| `anim.ts` | `Animator`: plays a frame range of a sheet **forwards or backwards**, per-frame `holds` (extra ms on a frame: the telegraph), `speed` (0 = frozen for hit-stop), `reverseTo(frame, ms)` (rewinds what has played so far), `progress`. Pure logic. |
+| `data.ts` | Constants and move tables: `HERO`, `HERO_ATTACKS` (L1, L2, L3), `HERO_CLIPS`, `ENEMY`, `ENEMY_ATTACKS` (SLASH, TWIN), `FX`. A `Clip` is `{sheet, from, to, fps, holds}`; a `HitDef` is `{a, b, dmg, posture, reach, band, kind}` with frames in sheet frame numbers. |
+| `combat.ts` | Pure rules: `inReach` (forward ellipse, y is depth), `resolveEnemyHit` -> `dodged / deflected / blocked / hit / missed`, `pressGuard` (the anti-mash rule), `chip`. |
+| `fighter.ts` | Sprite wrapper: owns an `Animator`, one foot anchor per character from the idle sheet, flip, tint flash, depth sort. |
+| `vfx.ts` | One-shot pimen sprite effects by manifest key (tint, additive, flip, scale). |
+| `ArenaScene.ts` | Player controller, enemy runner, hit resolution, feedback, HUD. State is plain objects (`scene.p`, `scene.e`, `scene.log`) so tests read it through `window.__arena`. |
+| `createArenaGame.ts`, `manifest.ts` | Boot (loads every sheet in the manifest), game factory, manifest types. |
+
+**Combo chain.** The three authored sheets share their first frames (1_atk is the first part of 2_atk, which is the first part of 3_atk), so a chain does not replay the wind-up: L1 = `fk_1_atk` 0-6, L2 = `fk_2_atk` 7-15 (the follow-through into the second swing), L3 = `fk_3_atk` 16-27 (into the fire finisher). A press is accepted from `chainFrom`; a press up to 150 ms *before* it is buffered; the chain continues when the clip ends. No continuation plays the recovery frames (`recover`). After the last damaging frame the player may cancel into roll or guard. This sheet-splicing trick is the pattern for every future combo: find the frame where one authored attack flows into the next.
+
+**Reverse parry.** A guard press within `HERO.deflectMs` (160 ms) before the hit connects (and not inside `deflectSpamMs` of the previous press) is a *deflect*: the enemy's current clip is rewound with `anim.reverseTo(clip.from, 300ms)`, then it holds the staggered pose; blue spark and smear, hit-stop 120 ms, camera shake, enemy knocked back 34 px, +130% posture, and a riposte window (800 ms, x1.5 damage). Held guard is a *block* (chip 12%, posture to the player). Roll i-frames (40-300 ms) *dodge*. At 100 posture an enemy breaks: every hit is a deathblow (x2.5, stacks with riposte). Enemy swings are armoured (no flinch mid-attack) and a 1 s poise window stops stun-lock.
+
+**Authoring a hit window.** Use the frame-index contact sheets: render the sheet's frames with indices (script pattern in the scratchpad this phase: crop each frame to the sheet bbox, label with the index) and pick `a..b` as the frames where the weapon smear is in front of the body. Mb attacks have a single wind-up frame 0 and strike at frame 1, so the telegraph is `holds: {0: 520}`. Hits resolve once, the first update in which the animation has reached frame `a` (so a coarse tick cannot skip a window).
+
+**Known rough edges, deliberately left for later phases:** floor is a flat procedural grid (Phase 4), HUD is plain bars and text (Phase 5), the enemy has two attacks and a trivial approach/attack AI with no Jev yet (Phase 3), no sound (v3's `sfx.ts` will be reused), no QTE (Phase 2), bodies can overlap briefly after knockback, and deflecting the *second* hit of TWIN (a longer reverse) is not covered by a test yet.
