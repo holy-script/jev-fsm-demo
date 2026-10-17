@@ -41,4 +41,29 @@ const pos = await p.evaluate(() => ({ px: window.__duel.player.x, py: window.__d
 check("the hero arrives at the Foundry's start with full health", Math.abs(pos.px - pos.sx) < 2 && Math.abs(pos.py - pos.sy) < 2 && pos.hp === 100, pos);
 await p.waitForTimeout(500); await p.screenshot({ path: "/private/tmp/claude-501/-Users-holyscript-Desktop-projects-jev-fsm-demo/0a66b84a-69b7-40fe-993e-07ff976d9cf7/scratchpad/w_foundry.png" });
 await p.close();
+
+// shrines and lore stones
+p = await game({ cleared: [], deaths: 0, skills: [], points: 2, tutorialDone: true });
+await p.evaluate(() => { const d = window.__duel; const sh = d.world.shrines[0]; d.player.x = sh.x - 10; d.player.y = sh.y + 14; d.p.hp = 40; d.p.heals = 0; d.p.spirit = 0; });
+await p.waitForTimeout(400);
+const near = await p.evaluate(() => ({ kind: window.__duel.nearby?.kind, prompt: window.__duel.prompt.visible, text: window.__duel.prompt.text }));
+check("standing at a shrine shows its prompt", near.kind === "shrine" && near.prompt === true && /Rest/.test(near.text), near);
+await p.keyboard.press("Enter"); await p.waitForFunction(() => window.__game.scene.isActive("skills"), null, { timeout: 15000 }).catch(() => {});
+const rest = await p.evaluate(() => ({ hp: window.__duel.p.hp, heals: window.__duel.p.heals, spirit: window.__duel.p.spirit, skills: window.__game.scene.isActive("skills") }));
+check("resting heals fully, refills the gourd and spirit, and opens the skill screen", rest.hp === 100 && rest.heals === 3 && rest.spirit >= 3 && rest.skills === true, rest);
+await p.keyboard.press("Escape"); await p.waitForTimeout(700);
+await p.evaluate(() => { const d = window.__duel; const ln = d.world.lore[0]; d.player.x = ln.x + 12; d.player.y = ln.y + 10; });
+await p.waitForTimeout(400); await p.keyboard.press("Enter"); await p.waitForTimeout(400);
+const lore = await p.evaluate(() => window.__duel.hud.dialog); check("reading a lore slab opens its inscription", lore?.who === "INSCRIPTION" && lore.text.length > 0, lore);
+await p.keyboard.press("Enter"); await p.waitForTimeout(500);
+const closed = await p.evaluate(() => window.__duel.hud.dialog); check("the press that closes the inscription does not reopen it", closed === null, { closed });
+await p.evaluate(() => { const d = window.__duel; d.wake(); const sh = d.world.shrines[0]; d.player.x = sh.x - 10; d.player.y = sh.y + 14; });
+await p.waitForTimeout(500); const fight = await p.evaluate(() => ({ n: window.__duel.nearby, active: window.__duel.bossActive() }));
+check("no shrine or lore prompt while a boss fight is on", fight.n === null && fight.active === true, fight);
+await p.close();
+p = await game({ cleared: [], deaths: 0, skills: [], points: 2, tutorialDone: false });
+await p.evaluate(() => { const d = window.__duel; const sh = d.world.shrines[0]; d.player.x = sh.x - 10; d.player.y = sh.y + 14; });
+await p.waitForTimeout(400); const tut = await p.evaluate(() => ({ n: window.__duel.nearby, on: window.__duel.tutorialOn }));
+check("no shrine prompt during the tutorial", tut.on === true && tut.n === null, tut);
+await p.close();
 console.log(errs.join("\n") || "no page errors"); console.log(`${results.filter(Boolean).length}/${results.length} passed`); await b.close();

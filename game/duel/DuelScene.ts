@@ -58,6 +58,13 @@ export class DuelScene extends Phaser.Scene {
   private map?: Phaser.Tilemaps.Tilemap;
   private mapObjs: Phaser.GameObjects.GameObject[] = [];
   private travelling = false;
+  private lightRT?: Phaser.GameObjects.RenderTexture;
+  private lightImg?: Phaser.GameObjects.Image;
+  private glows: { img: Phaser.GameObjects.Image; r: number; i: number }[] = [];
+  private propsGfx?: Phaser.GameObjects.Graphics;
+  private lightsOn = true;
+  private prompt?: Phaser.GameObjects.Text;
+  private nearby: { kind: "shrine" | "lore"; x: number; y: number; text?: string } | null = null;
   private card: { text: string; sub: string; t0: number } | null = null;
   // tutorial / dialogue state
   private dlg: { lines: { who: string; text: string }[]; i: number; shown: number; resolve: () => void } | null = null;
@@ -129,6 +136,20 @@ export class DuelScene extends Phaser.Scene {
       if (this.anims.exists(key)) continue;
       this.anims.create({ key, frames: this.anims.generateFrameNumbers(key, { start: 0, end: s.frames - 1 }), frameRate: FPS[key] ?? 14, repeat: LOOP.has(key) ? -1 : 0 });
     }
+    const qs = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : new URLSearchParams();
+    this.lightsOn = !this.registry.get("dev") || qs.has("light"); // the scripted tests skip the darkness layer (software rendering is slow)
+    if (!this.textures.exists("lightmask")) {
+      const tex = this.textures.createCanvas("lightmask", 256, 256)!;
+      const c = tex.getContext();
+      const grd = c.createRadialGradient(128, 128, 0, 128, 128, 128);
+      grd.addColorStop(0, "rgba(255,255,255,1)");
+      grd.addColorStop(0.45, "rgba(255,255,255,0.75)");
+      grd.addColorStop(1, "rgba(255,255,255,0)");
+      c.fillStyle = grd;
+      c.fillRect(0, 0, 256, 256);
+      tex.refresh();
+      tex.setFilter(Phaser.Textures.FilterMode.LINEAR);
+    }
     this.loadArea("monastery");
 
     this.sfx = new Sfx(this, this.man);
@@ -186,6 +207,8 @@ export class DuelScene extends Phaser.Scene {
     this.registry.set("hud", this.hud);
     if (process.env.NODE_ENV !== "production") (window as unknown as { __duel?: DuelScene }).__duel = this; // for scripted tests
     this.scene.launch("duelhud");
+    this.keys.ENTER.on("down", () => this.interact()); // registered first: a press that closes a dialogue must not also interact
+    this.prompt = this.add.text(0, 0, "", { fontFamily: "monospace", fontSize: "8px", color: "#ffe9a8", stroke: "#000", strokeThickness: 2 }).setOrigin(0.5).setDepth(62).setResolution(2).setVisible(false);
     for (const k of [this.keys.ENTER, this.keys.SPACE, this.keys.J]) k.on("down", () => this.dlgAdvance());
     this.begin();
   }
@@ -282,6 +305,7 @@ export class DuelScene extends Phaser.Scene {
   private wake() {
     if (this.b.awake) return;
     this.b.awake = true;
+    this.card = null;
     this.world.gateOpen = false;
     this.locked = true;
     const a = this.world.arena;
@@ -383,6 +407,7 @@ export class DuelScene extends Phaser.Scene {
     this.lastPy = this.player.y;
     this.updateNpc(now);
     this.updateZone(now);
+    this.drawWorldLight(now);
     this.player.tickFx(deltaMs);
     this.boss.tickFx(deltaMs);
     this.player.sync();
@@ -617,6 +642,10 @@ export class DuelScene extends Phaser.Scene {
     const area: AreaDef = AREAS[id];
     this.mapObjs.forEach((o) => o.destroy());
     this.mapObjs = [];
+    this.lightRT = undefined;
+    this.lightImg = undefined;
+    this.propsGfx = undefined;
+    this.glows = [];
     this.map?.destroy();
     const map = this.make.tilemap({ key: area.map });
     const ts = map.addTilesetImage("duel_tiles", "duel_tiles")!;
@@ -630,6 +659,72 @@ export class DuelScene extends Phaser.Scene {
       const g = this.add.graphics().setDepth(-5);
       for (let i = 0; i < 160; i++) g.fillStyle(0xdfe6ff, 0.25 + Math.random() * 0.6).fillRect(Math.random() * map.widthInPixels, Math.random() * map.heightInPixels, Math.random() < 0.15 ? 2 : 1, Math.random() < 0.15 ? 2 : 1);
       this.mapObjs.push(g);
+    }
+    this.buildProps(area);
+  }
+
+  /** Braziers, shrines, lore slabs and the darkness layer for the area. */
+  private buildProps(area: AreaDef) {
+    this.glows = [];
+    this.propsGfx = this.add.graphics().setDepth(14);
+    this.mapObjs.push(this.propsGfx);
+    if (!this.lightsOn) return;
+    const rt = this.add.renderTexture(0, 0, this.map!.widthInPixels, this.map!.heightInPixels).setOrigin(0).setDepth(35);
+    this.lightRT = rt;
+    this.lightImg = this.make.image({ key: "lightmask" }, false).setOrigin(0.5);
+    this.mapObjs.push(rt);
+    this.world.lights.forEach((l, i) => {
+      const img = this.add.image(l.x, l.y, "lightmask").setTint(l.color).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.1).setScale((l.r * 1.7) / 256).setDepth(36);
+      this.glows.push({ img, r: l.r, i });
+      this.mapObjs.push(img);
+    });
+    for (const sh of this.world.shrines) {
+      const img = this.add.image(sh.x, sh.y - 14, "lightmask").setTint(0x6bffd0).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.3).setScale(150 / 256).setDepth(36);
+      this.glows.push({ img, r: 110, i: 99 });
+      this.mapObjs.push(img);
+    }
+    void area;
+  }
+
+  /** Per-frame: redraw the darkness with lights cut out of it, and draw the flames and shrine glow. */
+  private drawWorldLight(now: number) {
+    const area = AREAS[this.areaId];
+    const g = this.propsGfx;
+    if (g) {
+      g.clear();
+      for (const [i, l] of this.world.lights.entries()) {
+        if (l.r > 190) continue; // atmospheric lights have no brazier
+        const fl = 0.75 + 0.25 * Math.sin(now / 80 + i * 1.7) + 0.1 * Math.sin(now / 37 + i);
+        g.fillStyle(0x2a2622).fillRect(l.x - 4, l.y - 4, 8, 10).fillStyle(0x4a443c).fillRect(l.x - 5, l.y - 6, 10, 3);
+        g.fillStyle(l.color, 0.95).fillTriangle(l.x - 3, l.y - 6, l.x + 3, l.y - 6, l.x + Math.sin(now / 90 + i) * 1.2, l.y - 6 - 9 * fl);
+        g.fillStyle(0xfff2c0, 0.9).fillTriangle(l.x - 1.5, l.y - 6, l.x + 1.5, l.y - 6, l.x, l.y - 6 - 5 * fl);
+      }
+      for (const sh of this.world.shrines) {
+        const pulse = 0.6 + 0.4 * Math.sin(now / 420);
+        g.fillStyle(0x3a3a46).fillRect(sh.x - 8, sh.y - 6, 16, 10).fillStyle(0x5a5a6a).fillRect(sh.x - 10, sh.y - 9, 20, 4);
+        g.fillStyle(0x6bffd0, 0.9).fillCircle(sh.x, sh.y - 17 - pulse * 2, 4 + pulse);
+        g.fillStyle(0xffffff, 0.8).fillCircle(sh.x, sh.y - 17 - pulse * 2, 1.6);
+      }
+      for (const ln of this.world.lore) {
+        g.fillStyle(0x4a463e).fillRect(ln.x - 6, ln.y - 12, 12, 14).fillStyle(0x6a655a).fillRect(ln.x - 7, ln.y - 14, 14, 3);
+        g.fillStyle(0xcfc7a0, 0.55).fillRect(ln.x - 3, ln.y - 9, 6, 1).fillRect(ln.x - 3, ln.y - 6, 4, 1);
+      }
+    }
+    const rt = this.lightRT;
+    if (!rt || !this.lightImg) return;
+    rt.clear();
+    rt.fill(area.ambient.color, area.ambient.alpha);
+    const cut = (x: number, y: number, r: number) => {
+      this.lightImg!.setScale((r * 2) / 256);
+      rt.erase(this.lightImg!, x, y);
+    };
+    this.world.lights.forEach((l, i) => cut(l.x, l.y - 6, l.r * (1 + 0.05 * Math.sin(now / 90 + i * 1.7))));
+    for (const sh of this.world.shrines) cut(sh.x, sh.y - 14, 120);
+    cut(this.player.x, this.player.y - 26, 215);
+    if (this.b.awake && this.b.mode !== "dead") cut(this.boss.x, this.boss.y - 30, 130);
+    for (const gl of this.glows) {
+      if (gl.i === 99) gl.img.setAlpha(0.2 + 0.07 * Math.sin(now / 420));
+      else gl.img.setAlpha(0.09 + 0.03 * Math.sin(now / 80 + gl.i * 1.7) + 0.02 * Math.sin(now / 37 + gl.i));
     }
   }
 
@@ -651,7 +746,57 @@ export class DuelScene extends Phaser.Scene {
   private showCard(text: string, sub: string) {
     this.card = { text, sub, t0: this.time.now };
   }
+  /** The nearest shrine or lore slab within reach, when nothing else is going on. */
+  private updateNearby() {
+    this.nearby = null;
+    if (this.dlg || this.travelling || this.tutorialOn || this.bossActive() || this.p.mode === "dead") return;
+    let best = 1e9;
+    const consider = (kind: "shrine" | "lore", o: { x: number; y: number; text?: string }, reach: number) => {
+      const d = dist(this.player.x, this.player.y, o.x, o.y);
+      if (d < reach && d < best) {
+        best = d;
+        this.nearby = { kind, x: o.x, y: o.y, text: o.text };
+      }
+    };
+    this.world.shrines.forEach((s) => consider("shrine", s, 34));
+    this.world.lore.forEach((l) => consider("lore", l, 30));
+  }
+
+  private interact() {
+    if (this.dlg || !this.nearby) return;
+    const n = this.nearby;
+    if (n.kind === "lore") {
+      this.sfx.blip("INSCRIPTION");
+      void this.say("INSCRIPTION", [n.text ?? "…"]);
+      return;
+    }
+    this.rest();
+  }
+
+  /** A shrine: heal fully, refill the gourd and spirit, save, and spend skill points. */
+  private rest() {
+    this.p.hp = HERO.maxHp;
+    this.p.posture = 0;
+    this.p.heals = HERO.heals;
+    this.p.spirit = this.maxSpirit();
+    saveGame();
+    this.sfx.heal();
+    this.vfx.heal(this.player.x, this.player.y - 34);
+    this.ring(this.player.x, this.player.y - 24, 0x6bffd0, 30);
+    this.popup(this.player.x, this.player.y - 80, "RESTED · saved", "#6bffd0");
+    this.hooks.onLog("rested at the shrine");
+    if (this.registry.get("dev")) return;
+    this.scene.launch("skills", { from: "duel" });
+    this.scene.pause();
+  }
+
   private updateZone(now: number) {
+    this.updateNearby();
+    if (this.prompt) {
+      const n = this.nearby;
+      this.prompt.setVisible(!!n);
+      if (n) this.prompt.setText(n.kind === "shrine" ? "[ENTER] Rest at the shrine" : "[ENTER] Read").setPosition(n.x, n.y - 38 + Math.sin(now / 250) * 1.5);
+    }
     const area = AREAS[this.areaId];
     const ty = this.player.y / TILE;
     const z = area.zones.find((zz) => ty >= zz.yMin && ty <= zz.yMax);

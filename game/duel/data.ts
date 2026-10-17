@@ -321,7 +321,7 @@ export interface AreaDef {
 export const AREAS: Record<string, AreaDef> = {
   monastery: {
     id: "monastery", name: "THE HOLLOW MONASTERY", map: "duel_map", groundTint: 0xc9b3a4, wallTint: 0xffffff, bg: "#0b0d12",
-    ambient: { alpha: 0.5, color: 0x0a0b14 }, music: "temple",
+    ambient: { alpha: 0.58, color: 0x0a0b14 }, music: "temple",
     zones: [
       { id: "hall", name: "HALL OF SPEARS", sub: "the guard still stands", yMin: 0, yMax: 33 },
       { id: "courtyard", name: "THE COURTYARD", sub: "where the sword master waits", yMin: 34, yMax: 99 },
