@@ -26,6 +26,7 @@ v3 is the real product. v1 and v2 are kept because they show the integration pat
 | [06-asset-pipeline.md](06-asset-pipeline.md) | You add or replace art, audio, music or maps. |
 | [07-testing.md](07-testing.md) | You change behaviour and need to verify it. Test harness design, per-suite coverage, pitfalls that cost hours. |
 | [08-extending.md](08-extending.md) | You are about to add something: a boss, a move type, an area, a skill, a taunt. Step-by-step recipes, plus the known backlog and lessons learned. |
+| [09-v4-plan.md](09-v4-plan.md) | You are building or reviewing v4 ("ARENA"): asset sources, animation and QTE systems, phases. |
 
 ## Five things to know before changing anything
 
