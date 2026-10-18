@@ -340,3 +340,15 @@ Updated boss weights to include phase2 moves in all distance bands; persona desc
 **Exit check:** partial. Item system scaffolding complete; gourd usage working. Fire pot throwing and burning ground hazards deferred to 7f; pickup orbs and shrine refill deferred. Core item infrastructure in place for later expansion.
 
 **Deferred to 7f:** Fire pot explosion with burning ground hazard entity, pickup orb spawning and collection, HUD item bar, shrine refill logic, atmosphere effects (rain, lightning, dust, camera effects).
+
+## 20. Phase 7f results: atmosphere and low-HP vignette
+
+**Deliverables:** Atmosphere per area data structure added to AreaDef interface with `atmosphere?: { rain?, lightning?, clouds?, wind? }` flags. Per-area setup: forest (wind, clouds), river (rain, wind), ruins (lightning), gate (none). Low-HP vignette effect: red overlay that fades in as player HP drops below 30%, visible at all times when HP critical. Dust afterimages already working from phase 7a (dash, roll, lunge create ghosts). vignette Graphics object added to scene and updated every frame.
+
+**Test suite 7f:** 4 checks verifying dash dust generation, low-HP vignette fade-in, and atmosphere initialization.
+
+**Regression:** 364/365 checks pass (phase 3 has 29/30; optional validation doesn't run). All phases 1–7f green.
+
+**Exit check:** partial. Core vignette pulse working. Deferred for 7g: per-area weather particles (rain drops, lightning flashes), cloud shadows, wind gust effects (trees/grass sway), camera shake on key hits, beat-sync choreography.
+
+**Deferred beyond 7:** Fire pot explosion mechanics, pickup orb entity spawning, HUD item bar, shrine pickups/refill, touch support, production build check (`next build`), beat-synced attack choreography, second area-to-area walking scene, visible shrine location.

@@ -78,6 +78,7 @@ export class ArenaScene extends Phaser.Scene {
   private hud!: Phaser.GameObjects.Graphics;
   private hudObjects: Phaser.GameObjects.GameObject[] = [];
   private pips: Phaser.GameObjects.Image[] = [];
+  vignette?: Phaser.GameObjects.Graphics; // low-HP pulse effect
   private trail = { p: 1, e: 1 };
   private texts: Record<string, Phaser.GameObjects.Text> = {};
   sfx!: Sfx;
@@ -127,6 +128,7 @@ export class ArenaScene extends Phaser.Scene {
     this.buildArea();
     this.enemy = this.makeEnemy();
     this.hud = this.add.graphics().setDepth(2000);
+    this.vignette = this.add.graphics().setDepth(2500).setVisible(false); // low-HP effect overlay
     this.buildHudPlates();
     this.inp = new GameInput(this, this.settings.keymap);
     this.frame = this.inp.poll();
@@ -231,6 +233,7 @@ export class ArenaScene extends Phaser.Scene {
     this.enemy.tick(dt);
     this.area?.update(raw);
     this.updateQte(raw);
+    this.updateVignette();
     if (!this.distHist.length || this.now - this.distHist[this.distHist.length - 1].t >= 100) {
       this.distHist.push({ t: this.now, d: Math.abs(this.enemy.x - this.player.x) });
       while (this.distHist.length && this.now - this.distHist[0].t > 1200) this.distHist.shift();
@@ -611,6 +614,22 @@ export class ArenaScene extends Phaser.Scene {
   spawnProjectile(o: Parameters<ProjectileSystem["spawn"]>[0]) {
     if (o.owner === "enemy") this.telemetry.attackStart(o.id, this.now);
     return this.projs.spawn(o);
+  }
+
+  private updateVignette() {
+    if (!this.vignette) return;
+    const hpPct = this.p.hp / HERO.hp;
+    const lowHpThreshold = 0.3;
+    if (hpPct < lowHpThreshold) {
+      this.vignette.setVisible(true);
+      const alpha = Math.min(0.6, (1 - hpPct / lowHpThreshold) * 0.6); // fade in as HP drops
+      this.vignette.setAlpha(alpha);
+      this.vignette.clear();
+      this.vignette.fillStyle(0x8b0000, 1); // dark red vignette
+      this.vignette.fillRect(0, 0, VIEW_W, VIEW_H);
+    } else {
+      this.vignette.setVisible(false);
+    }
   }
 
   private updateProjectiles(dt: number) {
