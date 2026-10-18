@@ -22,6 +22,7 @@ import type { ArenaHooks } from "./createArenaGame";
 import type { ArenaManifest } from "./manifest";
 import { Vfx } from "./vfx";
 import { AudioManager } from "./audio";
+import { CameraEffects } from "./camera";
 
 /** Phase 1 test arena: Fire Knight against a Metal Bladekeeper training enemy on a flat floor. The point is the kernel (combat model,
  *  combo chain, reverse perfect parry, animator), not the content; phases 3 to 5 replace the enemy, map and HUD. Controls:
@@ -86,6 +87,7 @@ export class ArenaScene extends Phaser.Scene {
   private texts: Record<string, Phaser.GameObjects.Text> = {};
   sfx!: Sfx;
   music!: AudioManager;
+  camera!: CameraEffects;
   /** menu: title backdrop (no input, AI idle, HUD hidden); play: the fight */
   mode: "menu" | "play" = "play";
   run: RunSave | null = null;
@@ -131,6 +133,7 @@ export class ArenaScene extends Phaser.Scene {
     this.boss = BOSSES[new URLSearchParams(window.location.search).get("boss") ?? "mb"] ?? BOSSES.mb;
     this.sfx = new Sfx(this, this.manifest, () => this.settings);
     this.music = new AudioManager();
+    this.camera = new CameraEffects(this);
     this.buildArea();
     this.enemy = this.makeEnemy();
     this.hud = this.add.graphics().setDepth(2000);
@@ -242,6 +245,7 @@ export class ArenaScene extends Phaser.Scene {
     this.area?.update(raw);
     this.updateQte(raw);
     this.updateVignette();
+    this.camera.update(this.now);
     if (!this.distHist.length || this.now - this.distHist[this.distHist.length - 1].t >= 100) {
       this.distHist.push({ t: this.now, d: Math.abs(this.enemy.x - this.player.x) });
       while (this.distHist.length && this.now - this.distHist[0].t > 1200) this.distHist.shift();
@@ -993,6 +997,7 @@ export class ArenaScene extends Phaser.Scene {
         this.popup(this.player.x, this.player.y - 130, "PARRY", "#8fd3ff");
         this.sfx.deflect();
         this.sfx.riposteReady();
+        this.camera.parryShake();
         this.telemetry.deflectLead(this.now - p.def.guardPressedAt);
         this.telemetry.record("deflect", this.now);
         p.spirit = Math.min(HERO.spirit, p.spirit + HERO.spiritDeflect);
@@ -1018,6 +1023,7 @@ export class ArenaScene extends Phaser.Scene {
         this.vfx.play(FX.sparkBlock, mid.x, mid.y, { scale: 1.1, flip: f.face > 0 });
         this.hitstop = Math.max(this.hitstop, 50);
         this.shake(0.002, 70);
+        this.camera.hitShake();
         this.popup(this.player.x, this.player.y - 130, "block", "#a5d6a7");
         this.sfx.block();
         if (p.hp <= 0) this.killPlayer();
@@ -1036,6 +1042,7 @@ export class ArenaScene extends Phaser.Scene {
         this.player.hitFlash(100, 0xff8888);
         this.hitstop = Math.max(this.hitstop, 80);
         this.shake(0.006, 140);
+        this.camera.hitShake();
         this.popup(this.player.x, this.player.y - 130, String(this.bdmg(h)), "#ff6b6b");
         this.sfx.hurt();
         this.sfx.hit(true);
@@ -1614,6 +1621,7 @@ export class ArenaScene extends Phaser.Scene {
     this.enemy.play(this.boss.clips.death);
     this.popup(this.enemy.x, this.enemy.y - 150, "VICTORY  (N: next)", "#ffd166");
     this.sfx.deathblow();
+    this.camera.shake({ durationMs: 200, intensity: 8 });
     // Spawn victory pickups (health + spirit)
     this.pickups.spawnReward(this.enemy.x, this.enemy.y, "heart", this.now, 1);
     this.pickups.spawnReward(this.enemy.x + 30, this.enemy.y + 30, "gem", this.now, 2);
