@@ -1,7 +1,7 @@
 import * as Phaser from "phaser";
 import { chip, inReach, pressGuard, resolveEnemyHit, type Defender, type Outcome } from "./combat";
 import {
-  AIR_ATTACK, BOLT, EMISSIVE_DEPTH, NOVA, JUMP_COUNTER, CLASH, COUNTER, DEATHBLOW, ENEMY, GATE_WAIT, FX, FX_EXTRA, GOURD, HERO, HERO_ATTACKS, HERO_CLIPS, SCALE, SKILLS, VIEW_H, VIEW_W,
+  AIR_ATTACK, BOLT, EMISSIVE_DEPTH, NOVA, JUMP_COUNTER, CLASH, COUNTER, DEATHBLOW, ENEMY, FIRE_POT, GATE_WAIT, FX, FX_EXTRA, GOURD, HERO, HERO_ATTACKS, HERO_CLIPS, SCALE, SKILLS, VIEW_H, VIEW_W,
   type EnemyAttack, type HitDef, type PlayerAttack,
 } from "./data";
 import { AREAS } from "./areas";
@@ -318,6 +318,17 @@ export class ArenaScene extends Phaser.Scene {
     let burnDmg = 0;
     for (const h of this.pickups.hazards) burnDmg += h.damagePlayerThisFrame(f.x, f.y, dt);
     if (burnDmg > 0) p.hp = Math.max(0, p.hp - burnDmg);
+    // Collect pickups
+    for (let i = this.pickups.pickups.length - 1; i >= 0; i--) {
+      const pk = this.pickups.pickups[i];
+      if (Math.hypot(pk.x - f.x, pk.y - f.y) < 40) {
+        this.pickups.pickups.splice(i, 1);
+        if (pk.kind === "heart" && pk.heal) p.hp = Math.min(100, p.hp + pk.heal);
+        else if (pk.kind === "gem" && pk.spirit) p.spirit = Math.min(HERO.spirit, p.spirit + pk.spirit);
+        else if (pk.kind === "bomb") p.firePotCharges = Math.min(3, p.firePotCharges + 1);
+        this.note("pickup", { kind: pk.kind });
+      }
+    }
     this.burn(f, p, dt);
     if (p.mode === "dead") return;
     if (p.mode === "qte") return this.qteInput(press);
@@ -1685,6 +1696,21 @@ export class ArenaScene extends Phaser.Scene {
       if (fill >= 1) im.setTint(0x8fd0ff);
       else im.clearTint();
     });
+    // item bar: gourd and fire pot with charge counters and cooldown overlays
+    const ibx = 34, iby = VIEW_H - 56;
+    const itemBar = (x: number, ix: number, charges: number, maxCharges: number, cdUntil: number, cdMs: number, bgColor: number) => {
+      const w = 28, h = 28, gap = 4;
+      for (let c = 0; c < maxCharges; c++) {
+        const cx = x + c * (w + gap);
+        g.fillStyle(0x140e08, 1).fillRect(cx - 1, ix - 1, w + 2, h + 2);
+        g.fillStyle(0x2a1d12, 1).fillRect(cx, ix, w, h);
+        g.fillStyle(c < charges ? bgColor : 0x3d3d3d, 1).fillRect(cx + 2, ix + 2, w - 4, h - 4);
+        const frac = c === charges - 1 ? Math.max(0, Math.min(1, (cdUntil - this.now) / cdMs)) : 0;
+        if (frac > 0) g.fillStyle(0x000000, 0.55).fillRect(cx + 2, ix + 2 + (h - 4) * (1 - frac), w - 4, (h - 4) * frac);
+      }
+    };
+    itemBar(ibx, iby, p.gourdCharges, 3, p.gourdCdUntil, GOURD.cdMs, 0x4a9eff);
+    itemBar(ibx + 110, iby, p.firePotCharges, 3, p.firePotCdUntil, FIRE_POT.cdMs, 0xff6b4a);
     // perilous telegraph ring closing on the enemy; white inside the counter window
     if (e.mode === "attack" && e.atk?.perilous && this.now < e.strikeAt) {
       const left = e.strikeAt - this.now;

@@ -130,7 +130,7 @@ export const NOVA = { cost: 3, cdMs: 1400, castMs: 520, releaseMs: 320, radius: 
 /** Healing Gourd (H): consumable that heals over time. Max 3 charges, refilled at shrine. */
 export const GOURD = { maxCharges: 3, healTotal: 60, healMs: 1000, cdMs: 8000 };
 
-/** Fire Pot (G): throwable bomb that explodes and leaves burning ground. """
+/** Fire Pot (G): throwable bomb that explodes and leaves burning ground. */
 export const FIRE_POT = { dmg: 18, posture: 8, cdMs: 6000, throwSpeed: 400, burnRadius: 120, burnDuration: 4000, burnDmgPerSec: 4 };
 
 /** Pickup orb types: heart (heal), gem (spirit), bomb (fire pot). */

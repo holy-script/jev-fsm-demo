@@ -9,6 +9,8 @@ export class Pickup {
   sprite?: Phaser.Physics.Arcade.Sprite;
   createdAt: number;
   lifetime: number;
+  heal?: number;
+  spirit?: number;
 
   constructor(x: number, y: number, kind: PickupKind, createdAt: number) {
     this.x = x;
@@ -16,6 +18,8 @@ export class Pickup {
     this.kind = kind;
     this.createdAt = createdAt;
     this.lifetime = PICKUPS[kind].lifetime;
+    if (kind === "heart") this.heal = PICKUPS[kind].heal;
+    if (kind === "gem") this.spirit = PICKUPS[kind].spirit;
   }
 
   isExpired(now: number): boolean {
