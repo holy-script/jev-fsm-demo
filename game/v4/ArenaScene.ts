@@ -188,6 +188,7 @@ export class ArenaScene extends Phaser.Scene {
     Object.assign(this.p, { vz: 0, airAtk: false, dashDone: 0, dashCdUntil: 0, jumpCdUntil: 0, landUntil: 0, boltCdUntil: 0, novaCdUntil: 0, castKind: null, castDone: false, gourdCharges: 3, gourdCdUntil: 0, firePotCharges: 1, firePotCdUntil: 0 });
     this.projs.clear();
     this.pickups.clear();
+    this.camera.clear();
     this.player.z = 0;
     this.player.stopTrail();
     Object.assign(this.e, { hp: this.boss.hp, posture: 0, mode: "idle", stance: "engage", stanceUntil: 0, stanceAt: 0, stanceAttacks: 0, circleUntil: 0, rushUntil: 0, leapAt: -1e9, atk: null, hitDone: [], thinkAt: 1200, cd: {}, recoilUntil: 0, brokenUntil: 0, poiseUntil: 0, lastHitAt: -1e9, dash: 0, reverseFrames: 0, reversedAttack: "", strikeAt: 0, action: null, lastActions: [], gate: null, resumeAt: 0, feinting: false, phase2: false });

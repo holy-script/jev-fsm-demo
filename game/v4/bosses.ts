@@ -78,18 +78,18 @@ const MB: BossDef = {
   attacks: {
     SLASH: {
       id: "SLASH", desc: "A single fast dagger slash with a short, readable wind-up. Can be deflected or blocked. Weak on its own, but cheap and low-risk; good for testing a player who guards early.",
-      clip: { sheet: "mb_1_atk", from: 0, to: 5, fps: 18, holds: { 0: 520 } }, hits: [{ a: 1, b: 3, dmg: 14, posture: 18, reach: 125 }],
+      clip: { sheet: "mb_1_atk", from: 0, to: 5, fps: 16, holds: { 0: 650 } }, hits: [{ a: 1, b: 3, dmg: 14, posture: 18, reach: 125 }],
       range: [0, 120], cooldownMs: 1400, lunge: 40, clashable: true,
     },
     TWIN: {
       id: "TWIN", desc: "Two quick dagger cuts in a row. After the first cut you can continue, delay the second (beats early guard taps), feint, or stop. Reaches slightly farther than SLASH.",
-      clip: { sheet: "mb_2_atk", from: 0, to: 7, fps: 18, holds: { 0: 560, 3: 150 } },
+      clip: { sheet: "mb_2_atk", from: 0, to: 7, fps: 16, holds: { 0: 680, 3: 180 } },
       hits: [{ a: 1, b: 2, dmg: 10, posture: 14, reach: 125 }, { a: 4, b: 5, dmg: 12, posture: 16, reach: 135 }],
       range: [40, 170], cooldownMs: 2000, lunge: 50, clashable: true, gate: gate(0),
     },
     FLURRY: {
       id: "FLURRY", desc: "A long three-part flurry (two cuts you can deflect) that ends in a big low SWEEP along the ground: unblockable, and rolling does not help, only a JUMP clears it (a player who leaps it can counter from the air). Strong against a player who stands, blocks or rolls. Gives a branch point after the first cut.",
-      clip: { sheet: "mb_3_atk", from: 0, to: 17, fps: 18, holds: { 0: 520, 3: 140, 10: 220 } },
+      clip: { sheet: "mb_3_atk", from: 0, to: 17, fps: 16, holds: { 0: 650, 3: 180, 10: 280 } },
       hits: [{ a: 1, b: 3, dmg: 9, posture: 12, reach: 125 }, { a: 4, b: 5, dmg: 9, posture: 12, reach: 135 }, { a: 11, b: 16, dmg: 16, posture: 22, reach: 170, kind: "sweep" }],
       range: [20, 180], cooldownMs: 3200, lunge: 40, gate: gate(0), perilous: true,
     },
@@ -136,12 +136,12 @@ const CM: BossDef = {
   attacks: {
     SWING: {
       id: "SWING", desc: "A slow, heavy overhead hammer swing with a long visible wind-up and a big hit. Easy to deflect if you read the wind-up, brutal if you are greedy. Deflecting it costs the Mauler a lot of posture.",
-      clip: { sheet: "cm_1_atk", from: 0, to: 6, fps: 14, holds: { 2: 520 } }, hits: [{ a: 3, b: 4, dmg: 20, posture: 24, reach: 120, kind: "heavy" }],
+      clip: { sheet: "cm_1_atk", from: 0, to: 6, fps: 14, holds: { 2: 650 } }, hits: [{ a: 3, b: 4, dmg: 20, posture: 24, reach: 120, kind: "heavy" }],
       range: [0, 125], cooldownMs: 1500, lunge: 20,
     },
     BACKHAND: {
       id: "BACKHAND", desc: "A sideways hammer sweep that comes a little quicker than SWING. Same weight. Good to vary against a player who has learned the timing of SWING.",
-      clip: { sheet: "cm_2_atk", from: 0, to: 6, fps: 14, holds: { 2: 430 } }, hits: [{ a: 3, b: 4, dmg: 18, posture: 22, reach: 125, kind: "heavy" }],
+      clip: { sheet: "cm_2_atk", from: 0, to: 6, fps: 14, holds: { 2: 550 } }, hits: [{ a: 3, b: 4, dmg: 18, posture: 22, reach: 125, kind: "heavy" }],
       range: [0, 130], cooldownMs: 1400, lunge: 20,
     },
     SLAM: {
@@ -209,7 +209,7 @@ const WH: BossDef = {
     },
     VANISH: {
       id: "VANISH", desc: "PHASE 2: the Hashashin vanishes in a blur (afterimages trail behind) and appears directly behind you, ready to slash. Beats a player who is focused on closing the distance; re-engage and keep the pressure to prevent the teleport.",
-      clip: { sheet: "wh_1_atk", from: 0, to: 7, fps: 20, holds: { 1: 300 } },
+      clip: { sheet: "wh_2_atk", from: 0, to: 8, fps: 20, holds: { 1: 300 } },
       hits: [{ a: 2, b: 3, dmg: 10, posture: 14, reach: 125 }], // strike on reappear
       range: [80, 280], cooldownMs: 5500, lunge: 0, phase2: true,
     },

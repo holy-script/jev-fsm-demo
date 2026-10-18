@@ -17,7 +17,7 @@ export class Sfx {
     // warnings standing out and swings/rolls sitting underneath.
     const TRIM: Record<string, number> = {
       swing: 6.5, hit: 9, deflect: 5, block: 6.5, guardBreak: 3, postureBreak: 4, deathblow: 0, hurt: 7, roll: 8.5, heal: 0, slip: 3.5,
-      stoneHit: 2.5, throwFist: 4.5, buff: 2, charge: 6, beamFire: 0, warn: 2.5, thud: 0, whoosh: 0, clash: 3,
+      stoneHit: 2.5, throwFist: 4.5, buff: 2, charge: 6, beamFire: 0, warn: 7, thud: 0, whoosh: 0, clash: 3,
       blip: 0, riposteReady: 3, spirit: 2, whirl: 5, throwBlade: 5, bladeHit: 7, locked: 0, skill: 0,
     };
     for (const [name, db] of Object.entries(TRIM)) {
