@@ -894,6 +894,8 @@ export class ArenaScene extends Phaser.Scene {
       e.phase2 = true;
       this.popup(this.enemy.x, this.enemy.y - 175, "PHASE 2", "#ff9f43");
       this.note("phase2");
+      // Spawn reward pickups at phase transition
+      this.pickups.spawnReward(this.enemy.x, this.enemy.y, "gem", this.now, 2);
     }
     if (e.gate) return this.updateGate();
     if (e.resumeAt && this.now >= e.resumeAt) {
@@ -994,6 +996,8 @@ export class ArenaScene extends Phaser.Scene {
         this.telemetry.deflectLead(this.now - p.def.guardPressedAt);
         this.telemetry.record("deflect", this.now);
         p.spirit = Math.min(HERO.spirit, p.spirit + HERO.spiritDeflect);
+        // Spawn spirit orbs on perfect parry
+        this.pickups.spawnReward(mid.x, mid.y, "gem", this.now, 1);
         break;
       case "countered":
         this.reverseEnemy(a, h, COUNTER.enemyPosture * (this.perk("wrist") ? 1.3 : 1));
@@ -1610,6 +1614,9 @@ export class ArenaScene extends Phaser.Scene {
     this.enemy.play(this.boss.clips.death);
     this.popup(this.enemy.x, this.enemy.y - 150, "VICTORY  (N: next)", "#ffd166");
     this.sfx.deathblow();
+    // Spawn victory pickups (health + spirit)
+    this.pickups.spawnReward(this.enemy.x, this.enemy.y, "heart", this.now, 1);
+    this.pickups.spawnReward(this.enemy.x + 30, this.enemy.y + 30, "gem", this.now, 2);
     this.endFight(true);
     this.note("enemyDead");
   }

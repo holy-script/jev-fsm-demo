@@ -73,6 +73,17 @@ export class PickupSystem {
     return h;
   }
 
+  /** Spawn pickup orb(s) at location. Used for phase transitions, perfect parries, etc. */
+  spawnReward(x: number, y: number, kind: PickupKind, now: number, count: number = 1): Pickup[] {
+    const pickups: Pickup[] = [];
+    for (let i = 0; i < count; i++) {
+      const offsetX = (Math.random() - 0.5) * 40; // scatter around spawn point
+      const offsetY = (Math.random() - 0.5) * 40;
+      pickups.push(this.spawnPickup(x + offsetX, y + offsetY, kind, now));
+    }
+    return pickups;
+  }
+
   update(now: number) {
     this.pickups = this.pickups.filter((p) => !p.isExpired(now));
     this.hazards = this.hazards.filter((h) => !h.isExpired(now));
