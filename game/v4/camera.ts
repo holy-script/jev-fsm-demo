@@ -12,12 +12,20 @@ export interface PunchConfig {
   direction: { x: number; y: number }; // normalized
 }
 
+export interface ZoomConfig {
+  durationMs: number;
+  targetZoom: number; // 1.0 = normal, 1.5 = 50% zoom in
+  easeOut?: boolean; // ease in/out vs ease in
+}
+
 export class CameraEffects {
   private shakes: (ShakeConfig & { startedAt: number })[] = [];
   private punches: (PunchConfig & { startedAt: number })[] = [];
+  private zooms: (ZoomConfig & { startedAt: number; startZoom: number })[] = [];
   private baseX: number = 0;
   private baseY: number = 0;
   private currentNow: number = 0;
+  private currentZoom: number = 1;
 
   constructor(private scene: Phaser.Scene) {}
 
@@ -29,6 +37,11 @@ export class CameraEffects {
   /** Add screen punch (quick directional move) */
   punch(config: PunchConfig) {
     this.punches.push({ ...config, startedAt: this.currentNow });
+  }
+
+  /** Add zoom effect (camera zoom in/out) */
+  zoom(config: ZoomConfig) {
+    this.zooms.push({ ...config, startedAt: this.currentNow, startZoom: this.currentZoom });
   }
 
   /** Update camera position based on active effects */
@@ -66,8 +79,24 @@ export class CameraEffects {
       return true;
     });
 
-    // Apply camera offset
+    // Process zooms
+    this.zooms = this.zooms.filter((z) => {
+      const elapsed = now - z.startedAt;
+
+      if (elapsed >= z.durationMs) {
+        this.currentZoom = z.targetZoom;
+        return false;
+      }
+
+      const easing = z.easeOut ? 1 - Math.pow(1 - elapsed / z.durationMs, 2) : elapsed / z.durationMs; // ease-out or ease-in
+      this.currentZoom = z.startZoom + (z.targetZoom - z.startZoom) * easing;
+
+      return true;
+    });
+
+    // Apply camera offset and zoom
     this.scene.cameras.main.setScroll(this.baseX - offsetX, this.baseY - offsetY);
+    this.scene.cameras.main.setZoom(this.currentZoom);
   }
 
   /** Shorthand: small shake on normal hits */
@@ -86,8 +115,15 @@ export class CameraEffects {
     this.punch({ durationMs: 150, strength: distance, direction: { x: x / mag, y: y / mag } });
   }
 
+  /** Shorthand: zoom in for deathblow moment */
+  killZoom() {
+    this.zoom({ durationMs: 300, targetZoom: 1.3, easeOut: true });
+  }
+
   clear() {
     this.shakes = [];
     this.punches = [];
+    this.zooms = [];
+    this.currentZoom = 1;
   }
 }

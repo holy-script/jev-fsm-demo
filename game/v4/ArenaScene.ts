@@ -1633,6 +1633,7 @@ export class ArenaScene extends Phaser.Scene {
     this.popup(this.enemy.x, this.enemy.y - 150, "VICTORY  (N: next)", "#ffd166");
     this.sfx.deathblow();
     this.camera.shake({ durationMs: 200, intensity: 8 });
+    this.camera.killZoom();
     // Spawn victory pickups (health + spirit)
     this.pickups.spawnReward(this.enemy.x, this.enemy.y, "heart", this.now, 1);
     this.pickups.spawnReward(this.enemy.x + 30, this.enemy.y + 30, "gem", this.now, 2);
