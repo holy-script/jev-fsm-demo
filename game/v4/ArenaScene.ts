@@ -405,7 +405,10 @@ export class ArenaScene extends Phaser.Scene {
         break;
       }
       case "hurt": {
-        if (this.now >= p.hurtUntil) p.mode = "free";
+        if (this.now >= p.hurtUntil) {
+          p.mode = "free";
+          p.invulnUntil = 0;
+        }
         break;
       }
       case "air": {
