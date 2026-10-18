@@ -11,42 +11,42 @@ export interface TrackMeta {
   contexts: ("exploration" | "boss-phase1" | "boss-phase2" | "boss" | "victory")[];
 }
 
-/** Proposed track assignments (placeholder until packs are downloaded and audited) */
+/** Boss fight tracks from alkakrab's Pixel RPG Music Pack (free, CC attribution not required) */
 export const MUSIC: Record<string, TrackMeta> = {
   bladekeeper_duel: {
     id: "bladekeeper_duel",
-    name: "Knight's Duel",
-    bpm: 120,
-    lengthMs: 120000,
-    loopMs: 30000,
-    file: "bladekeeper_duel.ogg",
+    name: "Pixel 3 (Bladekeeper Duel)",
+    bpm: 125,
+    lengthMs: 90000,
+    loopMs: 45000,
+    file: "boss-bladekeeper.wav",
     contexts: ["boss-phase1"],
   },
   mauler_siege: {
     id: "mauler_siege",
-    name: "Siege",
+    name: "Pixel 8 (Mauler Siege)",
     bpm: 110,
-    lengthMs: 150000,
-    loopMs: 40000,
-    file: "mauler_siege.ogg",
+    lengthMs: 84000,
+    loopMs: 42000,
+    file: "boss-mauler.wav",
     contexts: ["boss-phase1"],
   },
   hashashin_desert: {
     id: "hashashin_desert",
-    name: "Desert Battle",
-    bpm: 130,
-    lengthMs: 100000,
-    loopMs: 25000,
-    file: "hashashin_desert.ogg",
+    name: "Pixel 5 (Hashashin Rush)",
+    bpm: 135,
+    lengthMs: 99000,
+    loopMs: 49500,
+    file: "boss-hashashin.wav",
     contexts: ["boss-phase1"],
   },
   echo_synthetic: {
     id: "echo_synthetic",
-    name: "Synthetic",
-    bpm: 140,
-    lengthMs: 110000,
-    loopMs: 27500,
-    file: "echo_synthetic.ogg",
+    name: "Pixel 12 (Echo Evolution)",
+    bpm: 128,
+    lengthMs: 96000,
+    loopMs: 48000,
+    file: "boss-echo.wav",
     contexts: ["boss-phase1"],
   },
 };

@@ -86,6 +86,13 @@ The real game plays: the tutorial (Sparring Shade), the **Bone Soldier** and the
 - Pixel RPG UI Pack (frames, parchment style)
 - RPG Icon Packs 24x32 (items, UI elements)
 
+**Boss Fight Music** — [alkakrab](https://alkakrab.itch.io/) (free, credit appreciated)
+- Pixel 3: Bladekeeper theme (120–130 BPM, measured duel energy)
+- Pixel 8: Mauler theme (100–120 BPM, heavy siege power)
+- Pixel 5: Hashashin theme (130–140 BPM, swift dance rhythm)
+- Pixel 12: Echo theme (120–135 BPM, adaptive cinematic build)
+- From: Free 12 Tracks - Pixel RPG Game Music Pack (12-track pixel-style set)
+
 **Music Infrastructure** — Ready for beat-sync integration with tracks from:
 - [alkakrab](https://alkakrab.itch.io/) — Fantasy RPG Soundtrack, 12-Track Pixel RPG Music
 - [davidkbd](https://davidkbd.itch.io/) — Eternity Metal/Sci-Fi Music Pack
