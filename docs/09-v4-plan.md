@@ -1,6 +1,6 @@
 # 09. v4 plan: "ARENA" proper demo
 
-Status: **Phases 0 (assets, 9), 1 (kernel, 10), 2 (combat depth, 11) 3 (bosses and Jev, 12) 4 (world, 13) and 5 (UI/UX, 14) done.** Phase 6 (balance, play-test, polish) next. Decisions taken with the user: free assets only; v4 is a new route `/arena` in `game/v4/` (v3 `/duel` stays untouched and playable); the setting follows the environment packs (forest, ruined river temple, graveyard), so the v3 monastery/foundry/summit story is rewritten.
+Status: **Phases 0 (assets, 9), 1 (kernel, 10), 2 (combat depth, 11) 3 (bosses and Jev, 12) 4 (world, 13) 5 (UI/UX, 14) and 6 (balance and demo, 15) done.** What remains is human play-testing and the polish list in 15.6. Decisions taken with the user: free assets only; v4 is a new route `/arena` in `game/v4/` (v3 `/duel` stays untouched and playable); the setting follows the environment packs (forest, ruined river temple, graveyard), so the v3 monastery/foundry/summit story is rewritten.
 
 Goal: a polished 10 to 15 minute demo where Jev is visibly the enemy's brain, with a consistent art style, better environments, richer combat (combos, reverse-animation parries, quick-time events) and a real UI.
 
@@ -241,3 +241,38 @@ Dark nine-slice plates (`ui_30`, at 2x) behind the player bars (bottom-left) and
 
 ### 14.5 Known gaps, handed to Phase 6
 No beat-synced prompts (the beat clock exists in `Sfx.beatPos` but fights are not choreographed to it); the shrine, skills screen and a second skill are not built (spirit has one use); QTE overlay and clash bar are still plain drawing; boss intros and outros appear only as the area card line and the victory screen; menus are mouse-first (keyboard focus works but there is no arrow-key navigation); gamepad cannot operate the menus; no touch support; the Jev strip text is small at low resolutions; the pad Start pause also needs the page to have focus.
+
+## 15. Phase 6 results: balance, shrine, guided demo (`npm run test:arena` = 18 + 19 + 30 + 12 + 16 + 16 + 46 + 9 + 33 = 199 checks)
+
+### 15.1 The balance harness (`tests/arena/bot.mjs`, `npm run balance:arena`)
+`node tests/arena/bot.mjs [bosses] [levels] [runs] [seed]` (env `ASSIST=1`, `VERBOSE=1` for a per-move table). It fights every boss at three skill levels against the **rules brain** (no Jev calls), with the simulation fast-forwarded: the game loop is put to sleep, `scene.update` is stepped by hand at 60 Hz and sound, popups, shake and VFX are stubbed so nothing leaks. The scripted player is injected through `scene.botFrame` (a test hook that replaces the frame's input). It reads the boss's own animation timing (`remaining()` = time to the next unresolved hit, from the clip's fps, holds and the animator's progress), waits a skill-dependent reaction time, then parries, counters (attack press before a perilous strike) or rolls with Gaussian timing noise, mashes clashes, hits the QTE rings, and attacks when the boss is open but not when it is about to act (a chain locks the player in, so careful players do not start one late). Skills: novice (300 ms reaction, 85 ms noise, answers 55% of attacks), competent (190 ms, 42 ms, 85%), expert (120 ms, 18 ms, 97%).
+
+Results with the shipped numbers (24 fights per cell, seed 21; "player wins"):
+
+| Boss | HP | novice | competent | expert | competent + assist |
+|---|---|---|---|---|---|
+| Bladekeeper | 600 | 17% | 79% | 100% | 100% |
+| Mauler | 800 | 0% | 58% | 100% | 92% |
+| Hashashin | 520 | 8% | 79% | 100% | 96% |
+| Echo | 700 | 0% | 58% | 100% | 92% |
+
+The bot is far steadier than a person (perfect attention, no hesitation), so read the novice column as "a rough human", the competent column as "a good player" and treat all of it as an ordering, not a prediction. Real play-testing is still the input that matters.
+
+**What the tuning levers are** (all in `bosses.ts` unless stated): `hp`; `dmgMul` (damage to the player); `postureMul` (posture the player's hits add to the boss: 0.3 to 0.45, so plain hits rarely break a boss and **parries are the way to break it**); `pace` (shorter pauses between boss actions); `DEATHBLOW.damage` in `data.ts` is now a *fraction of the boss's max HP* (execute 20%, clean 12%, scuffed 5%) so the QTE is a chunk of any boss's bar. Light hits no longer stagger a boss (hyper-armour): only heavy hits, ripostes or posture 70+ do. Findings that drove the numbers: with flat damage and free staggers every boss died in 8 to 12 simulated seconds; posture breaks (each a 20% deathblow) dominated, so posture intake was cut; a bot that chained into the boss's next action got punished like a human would, which is a healthy sign for the combat design.
+
+**Combat assist** (Settings, or forced on in the demo): deflect window 240 ms instead of 160 and boss damage x0.7. It lifts the novice bot from 6% to 81% on the first boss.
+
+### 15.2 Shrine and gifts (`perks.ts`)
+After each of the first three bosses the shrine offers three of six gifts and the player keeps one for the run: Keen Eye (+40 ms deflect window), Iron Wrist (deflects and counters knock 30% more posture off the boss), Warm Ember (start every fight with 2 spirit), Kindled Blade (Flame Burst costs 1), Steady Breath (posture recovers 50% faster), Long Reach (+15% sword reach). The offer is seeded by the boss index so it never changes on reload and never repeats a gift you hold. Gifts live in the save (`RunSave.perks`), apply through `scene.perk(id)`, show in the pause menu, and the fourth fight (Echo) has no shrine before it. Beating Echo goes to the ending.
+
+### 15.3 Guided demo
+Title screen "Guided demo (about 12 min)": a fresh run with combat assist forced on (`scene.demo`, not saved), the Jev panel open, and a **briefing before every boss** (the scene is paused behind it) that tells the audience what to watch: the reverse parry and swapping Jev for the rules bot (Bladekeeper), Jev's DELAY and the perilous counter (Mauler), gate decisions and FEINT (Hashashin), Echo reading the player's habits. After each victory the fight summary shows how many decisions Jev made and how fast; then the shrine; then the next briefing. Quitting leaves demo mode.
+
+### 15.4 Menu navigation
+Arrow keys move focus through every menu, Enter activates; with a pad the d-pad moves, A presses, B or Start goes back (the first screen after pausing ignores the Start press that opened it).
+
+### 15.5 Housekeeping
+`scene.botFrame`, `window.__consts` and `window.__arena` exist only outside production. The phase 2 to 5 suites were updated for the new numbers (boss HP, deathblow fractions, posture intake, the shrine step after a victory); they derive values from the data where they can.
+
+### 15.6 What is left (needs a human, or is deliberately deferred)
+Play-testing: feel of the parry window, telegraph lengths, QTE timing, hit-stop and shake, audio levels, how long a real first run takes (target 10 to 15 minutes with the guided demo). Beat-synced choreography (the beat clock exists but fights are not choreographed to it). A second area-to-area walking scene and a visible shrine location. Hashashin's teleport special, Mauler's crystal-shell guard and the Bladekeeper's projectile and trap (art and no entity system yet). Touch support. A production build check (`next build`) was not run because it would overwrite the dev server's `.next`; run it before deploying. The 18 paid pimen buff/debuff packs and the paid chierit characters remain unused by design.

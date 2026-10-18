@@ -175,7 +175,7 @@ for (const id of ["cm", "wh", "echo", "mb"]) {
 // ---- 17: progression
 reset(); await setup("mb", 100, false); await p.evaluate(() => (window.__arena.e.hp = 3)); await key("j", 30); await p.waitForTimeout(800); await key("n", 40); await p.waitForTimeout(400);
 const nb = await p.evaluate(() => ({ id: window.__arena.boss.id, hp: window.__arena.e.hp, prefix: window.__arena.enemy.prefix }));
-check("victory then N loads the next boss (Crystal Mauler, 230 hp)", nb.id === "cm" && nb.hp === 230 && nb.prefix === "cm", nb);
+check("victory then N loads the next boss (Crystal Mauler, 800 hp)", nb.id === "cm" && nb.hp === 800 && nb.prefix === "cm", nb);
 
 await p.screenshot({ path: process.env.SHOT || "/tmp/arena_phase3.png" });
 check("no page or console errors", errs.length === 0, errs.slice(0, 3));

@@ -76,6 +76,9 @@ export const HERO = {
   rollIFrames: [40, 300] as [number, number],
   rollCdMs: 220,
   deflectMs: 160, // guard pressed this recently before the hit connects = perfect deflect
+  /** Combat assist (Settings): a wider deflect window and gentler bosses */
+  assistDeflectMs: 240,
+  assistDamage: 0.7,
   deflectSpamMs: 260, // pressing again inside this window of the previous press gives no window
   chipFraction: 0.12,
   postureHitFraction: 0.4,
@@ -107,7 +110,8 @@ export const DEATHBLOW = {
   assistFactor: 1.6, // window and tolerance scale in the "assist" setting
   keys: ["J", "K", "L"],
   slowmo: 0.22,
-  damage: { execute: 70, clean: 45, scuffed: 20 },
+  /** fraction of the boss's max HP removed by each deathblow grade */
+  damage: { execute: 0.2, clean: 0.12, scuffed: 0.05 },
   /** distance the knight steps to before the finisher */
   gap: 70,
 };

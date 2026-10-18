@@ -27,6 +27,13 @@ const scr = () => p.getAttribute("[data-screen]", "data-screen");
 const waitScreen = (s, t = 8000) => p.waitForFunction((x) => document.querySelector("[data-screen]")?.getAttribute("data-screen") === x, s, { timeout: t });
 const ls = (k) => p.evaluate((key) => JSON.parse(localStorage.getItem(key) ?? "null"), k);
 const sc = (fn) => p.evaluate(fn);
+/** "Next" after a victory: the shrine (pick the first gift) then the next fight */
+const proceed = async () => {
+  await p.getByTestId("next").click();
+  await p.waitForFunction(() => ["shrine", "playing"].includes(document.querySelector("[data-screen]")?.getAttribute("data-screen")), null, { timeout: 8000 });
+  if ((await scr()) === "shrine") await p.locator('[data-testid^="perk-"]').first().click();
+  await waitScreen("playing");
+};
 const boot = async (url = "/arena?nocard=1", clear = true) => {
   await p.goto("http://localhost:3000" + url, { waitUntil: "load" });
   if (clear) { await p.evaluate(() => localStorage.clear()); await p.reload({ waitUntil: "load" }); }
@@ -113,7 +120,7 @@ const sv1 = await ls("arena.save.1");
 check("the run is saved: bossIndex 1, cleared [mb]", sv1.bossIndex === 1 && sv1.cleared.join() === "mb", sv1);
 const rec = await ls("arena.stats");
 check("the fight is recorded with its brain (jev) and result (player won)", rec.length === 1 && rec[0].brain === "jev" && rec[0].won === true && rec[0].boss === "mb", rec[0]);
-await p.getByTestId("next").click(); await waitScreen("playing");
+await proceed();
 check("Next loads the Crystal Mauler in the river area with the AI on", (await sc(() => ({ b: window.__arena.boss.id, a: window.__arena.area.def.id, auto: window.__arena.e.auto }))).b === "cm", "");
 
 // ---- defeat -> retry
@@ -139,7 +146,7 @@ await sc(() => { const d = window.__arena; d.e.hp = 0; d.e.auto = false; d.killE
 await waitScreen("victory", 6000);
 const rec2 = await ls("arena.stats");
 check("that fight is recorded as 'rules'", rec2[rec2.length - 1].brain === "rules", rec2.map((r) => r.brain));
-await p.getByTestId("next").click(); await waitScreen("playing");
+await proceed();
 await p.keyboard.down("f"); await p.waitForTimeout(60); await p.keyboard.up("f"); await p.waitForTimeout(200);
 check("F swaps the brain mid-fight (rules -> jev)", (await sc(() => window.__arena.brain.mode)) === "jev", "");
 await sc(() => { const d = window.__arena; d.e.hp = 0; d.e.auto = false; d.killEnemy(); }); await waitScreen("victory", 6000);

@@ -21,13 +21,13 @@ export function inReach(ax: number, ay: number, face: 1 | -1, tx: number, ty: nu
 }
 
 /** What happens when an enemy hit connects with a defender at scene time `now`. */
-export function resolveEnemyHit(d: Defender, now: number, hit: HitDef, inRangeNow: boolean, countered = false): Outcome {
+export function resolveEnemyHit(d: Defender, now: number, hit: HitDef, inRangeNow: boolean, countered = false, deflectMs = HERO.deflectMs): Outcome {
   if (!inRangeNow) return "missed";
   if (d.invulnerable) return "dodged";
   const kind = hit.kind ?? "normal";
   if (kind === "perilous") return countered ? "countered" : "hit"; // guard does nothing against a perilous attack
   if (d.guarding && kind !== "sweep") {
-    const fresh = now - d.guardPressedAt <= HERO.deflectMs;
+    const fresh = now - d.guardPressedAt <= deflectMs;
     return fresh && !d.noDeflect ? "deflected" : "blocked";
   }
   return "hit";

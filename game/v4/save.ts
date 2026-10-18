@@ -7,12 +7,14 @@ export interface RunSave {
   deaths: number;
   playMs: number;
   finished: boolean;
+  /** shrine perks chosen so far (perks.ts ids) */
+  perks: string[];
   updated: number;
 }
 export const SLOTS = [1, 2, 3];
 const key = (slot: number) => `arena.save.${slot}`;
 
-export const newRun = (slot: number): RunSave => ({ slot, bossIndex: 0, cleared: [], deaths: 0, playMs: 0, finished: false, updated: Date.now() });
+export const newRun = (slot: number): RunSave => ({ slot, bossIndex: 0, cleared: [], deaths: 0, playMs: 0, finished: false, perks: [], updated: Date.now() });
 
 export function loadSave(slot: number): RunSave | null {
   try {

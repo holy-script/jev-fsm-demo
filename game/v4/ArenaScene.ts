@@ -76,9 +76,16 @@ export class ArenaScene extends Phaser.Scene {
   /** menu: title backdrop (no input, AI idle, HUD hidden); play: the fight */
   mode: "menu" | "play" = "play";
   run: RunSave | null = null;
+  /** guided demo: combat assist is forced on (not saved) */
+  demo = false;
+  get assist() {
+    return this.settings.assist || this.demo;
+  }
   private fight = { brain: "jev" as BrainTag, mixed: false, hp0: 100 };
   inp!: GameInput;
   frame!: InputFrame;
+  /** test hook: a scripted player (tests/arena/bot.mjs) supplies the frame's input instead of the keyboard */
+  botFrame: (() => Partial<InputFrame>) | null = null;
   private manifest!: ArenaManifest;
   boss!: BossDef;
   brain!: BossBrain;
@@ -138,7 +145,8 @@ export class ArenaScene extends Phaser.Scene {
     this.hooks?.onBoss?.(this.boss.name);
     if (process.env.NODE_ENV !== "production") (window as unknown as { __arena?: ArenaScene; __bosses?: typeof BOSSES }).__arena = this;
     if (process.env.NODE_ENV !== "production") (window as unknown as { __bosses?: typeof BOSSES; __areas?: typeof AREAS }).__bosses = BOSSES;
-    if (process.env.NODE_ENV !== "production") (window as unknown as { __areas?: typeof AREAS }).__areas = AREAS;
+    if (process.env.NODE_ENV !== "production") (window as unknown as { __areas?: typeof AREAS; __consts?: unknown }).__areas = AREAS;
+    if (process.env.NODE_ENV !== "production") (window as unknown as { __consts?: unknown }).__consts = { HERO, DEATHBLOW, CLASH, COUNTER, ENEMY };
   }
 
   reset() {
@@ -159,6 +167,7 @@ export class ArenaScene extends Phaser.Scene {
     this.brain.reset();
     this.brain.mode = this.settings.brain; // every new fight starts on the brain chosen in Settings (F still swaps it mid-fight)
     this.fight = { brain: this.brain.mode, mixed: false, hp0: HERO.hp };
+    if (this.perk("ember")) this.p.spirit = 2;
     this.gateToken++;
     this.standingStill = 0;
     this.remembered = false;
@@ -190,6 +199,7 @@ export class ArenaScene extends Phaser.Scene {
     }
     this.now += dt;
     this.frame = this.inp.poll();
+    if (this.botFrame) this.frame = { dir: { x: 0, y: 0, any: false }, attack: false, guard: false, roll: false, skill: false, guardHeld: false, pause: false, pad: false, ...this.botFrame() };
     if (this.mode === "menu") this.frame = { dir: { x: 0, y: 0, any: false }, attack: false, guard: false, roll: false, skill: false, guardHeld: false, pause: false, pad: false };
     else if (this.run && this.e.mode !== "dead" && this.p.mode !== "dead") this.run.playMs += raw;
     if (this.frame.pause) this.hooks?.onPause?.();
@@ -274,7 +284,7 @@ export class ArenaScene extends Phaser.Scene {
     const rollT = this.now - p.rollStart;
     p.def.invulnerable = this.now < p.invulnUntil || (p.mode === "roll" && rollT >= HERO.rollIFrames[0] && rollT <= HERO.rollIFrames[1]);
     if (this.e.mode !== "dead" && p.mode !== "dead") f.face = this.enemy.x >= f.x ? 1 : -1;
-    if (this.now - p.lastHitAt > HERO.postureRegenDelayMs && p.mode !== "hurt") p.posture = Math.max(0, p.posture - (HERO.postureRegen * (p.def.guarding ? 0.5 : 1) * dt) / 1000);
+    if (this.now - p.lastHitAt > HERO.postureRegenDelayMs && p.mode !== "hurt") p.posture = Math.max(0, p.posture - (HERO.postureRegen * (this.perk("breath") ? 1.5 : 1) * (p.def.guarding ? 0.5 : 1) * dt) / 1000);
     this.burn(f, p, dt);
     if (p.mode === "dead") return;
     if (p.mode === "qte") return this.qteInput(press);
@@ -339,8 +349,9 @@ export class ArenaScene extends Phaser.Scene {
 
   private startSkill(id: string) {
     const p = this.p, sk = SKILLS[id];
-    if (p.spirit < sk.cost || this.e.mode === "dead") return;
-    p.spirit -= sk.cost;
+    const cost = this.perk("kindled") ? Math.max(1, sk.cost - 1) : sk.cost;
+    if (p.spirit < cost || this.e.mode === "dead") return;
+    p.spirit -= cost;
     this.telemetry.record("skill", this.now);
     this.startAttack(id, sk);
     this.note("skill", { id, spirit: p.spirit });
@@ -423,7 +434,7 @@ export class ArenaScene extends Phaser.Scene {
         return;
       }
       if (this.e.mode === "dead") return;
-      if (inReach(this.player.x, this.player.y, this.player.face, this.enemy.x, this.enemy.y, h.reach, h.band ?? 38, this.boss.radius)) {
+      if (inReach(this.player.x, this.player.y, this.player.face, this.enemy.x, this.enemy.y, h.reach * (this.perk("reach") ? 1.15 : 1), h.band ?? 38, this.boss.radius)) {
         p.hitDone[i] = true;
         this.playerHitsEnemy(a, h, i);
       }
@@ -454,12 +465,14 @@ export class ArenaScene extends Phaser.Scene {
       e.mode = "idle";
       e.poiseUntil = this.now + ENEMY.poiseMs;
     } else {
-      e.posture = Math.min(100, e.posture + h.posture);
+      e.posture = Math.min(100, e.posture + h.posture * (this.boss.postureMul ?? 1));
       if (e.posture >= ENEMY.posture) return this.breakEnemy();
     }
     if (e.hp <= 0) return this.killEnemy();
     // flinch unless mid-attack (armoured while swinging) or inside the poise window
-    if (e.mode !== "attack" && e.mode !== "broken" && e.mode !== "recoil" && this.now >= e.poiseUntil) {
+    // light hits do not stagger a boss (hyper-armour): only heavy hits, ripostes or a boss close to breaking do
+    const staggers = h.kind === "heavy" || riposte || e.posture >= 70;
+    if (staggers && e.mode !== "attack" && e.mode !== "broken" && e.mode !== "recoil" && this.now >= e.poiseUntil) {
       e.mode = "flinch";
       e.poiseUntil = this.now + ENEMY.poiseMs;
       this.enemy.play(this.boss.clips.hit, { onDone: () => e.mode === "flinch" && ((e.mode = "idle"), (e.thinkAt = this.now + 300)) });
@@ -489,7 +502,7 @@ export class ArenaScene extends Phaser.Scene {
         if (e.mode !== "attack") return;
         e.mode = "idle";
         e.atk = null;
-        e.thinkAt = this.now + 500;
+        e.thinkAt = this.now + 500 * (this.boss.pace ?? 1);
       },
     });
     let lead = 0;
@@ -547,7 +560,7 @@ export class ArenaScene extends Phaser.Scene {
       case "recoil": {
         if (this.now >= e.recoilUntil) {
           e.mode = "idle";
-          e.thinkAt = this.now + 400;
+          e.thinkAt = this.now + 400 * (this.boss.pace ?? 1);
         }
         break;
       }
@@ -573,7 +586,7 @@ export class ArenaScene extends Phaser.Scene {
     const inRange = inReach(f.x, f.y, f.face, this.player.x, this.player.y, h.reach, h.band ?? 38, HERO.radius, h.around);
     if (a.clashable && inRange && p.mode === "attack" && p.atk && !p.recovering && this.playerInStrike()) return this.startClash(a, h, i);
     const countered = h.kind === "perilous" && this.now - p.counterAt <= HERO.counterMs;
-    const out: Outcome = resolveEnemyHit(p.def, this.now, h, inRange, countered);
+    const out: Outcome = resolveEnemyHit(p.def, this.now, h, inRange, countered, (this.assist ? HERO.assistDeflectMs : HERO.deflectMs) + (this.perk("keen") ? 40 : 0));
     this.note("enemyHit", { id: a.id, hit: i, outcome: out, frame: f.anim.frame });
     this.telemetry.outcome(a.id, out);
     const mid = { x: (this.player.x + f.x) / 2, y: this.player.y - 40 * SCALE * 0.6 };
@@ -592,7 +605,7 @@ export class ArenaScene extends Phaser.Scene {
         }
         break;
       case "deflected":
-        this.reverseEnemy(a, h, h.posture * 1.3);
+        this.reverseEnemy(a, h, h.posture * 1.3 * (this.perk("wrist") ? 1.3 : 1));
         this.vfx.play(FX.sparkParry, mid.x, mid.y, { scale: 1.6, flip: f.face > 0 });
         this.vfx.play(FX.smear, mid.x, mid.y - 6, { scale: 1.4, flip: f.face < 0, tint: 0x8fd3ff, add: true });
         this.popup(this.player.x, this.player.y - 130, "PARRY", "#8fd3ff");
@@ -603,7 +616,7 @@ export class ArenaScene extends Phaser.Scene {
         p.spirit = Math.min(HERO.spirit, p.spirit + HERO.spiritDeflect);
         break;
       case "countered":
-        this.reverseEnemy(a, h, COUNTER.enemyPosture);
+        this.reverseEnemy(a, h, COUNTER.enemyPosture * (this.perk("wrist") ? 1.3 : 1));
         this.vfx.play(FX.sparkParry, this.enemy.x, mid.y, { scale: 2.2, flip: f.face > 0 });
         this.vfx.play(FX_EXTRA.holy, this.enemy.x, mid.y - 10, { scale: 1.4, add: true });
         this.popup(this.player.x, this.player.y - 140, "COUNTER", "#ffd166");
@@ -613,7 +626,7 @@ export class ArenaScene extends Phaser.Scene {
         p.spirit = Math.min(HERO.spirit, p.spirit + HERO.spiritCounter);
         break;
       case "blocked": {
-        const dmg = chip(h.dmg);
+        const dmg = chip(this.bdmg(h));
         p.hp = Math.max(0, p.hp - dmg);
         p.posture = Math.min(HERO.posture, p.posture + h.posture);
         p.lastHitAt = this.now;
@@ -628,8 +641,8 @@ export class ArenaScene extends Phaser.Scene {
         break;
       }
       case "hit": {
-        p.hp = Math.max(0, p.hp - h.dmg);
-        p.posture = Math.min(HERO.posture, p.posture + h.dmg * HERO.postureHitFraction);
+        p.hp = Math.max(0, p.hp - this.bdmg(h));
+        p.posture = Math.min(HERO.posture, p.posture + this.bdmg(h) * HERO.postureHitFraction);
         p.lastHitAt = this.now;
         p.def.guarding = false;
         p.atk = null;
@@ -639,7 +652,7 @@ export class ArenaScene extends Phaser.Scene {
         this.player.hitFlash(100, 0xff8888);
         this.hitstop = Math.max(this.hitstop, 80);
         this.shake(0.006, 140);
-        this.popup(this.player.x, this.player.y - 130, String(h.dmg), "#ff6b6b");
+        this.popup(this.player.x, this.player.y - 130, String(this.bdmg(h)), "#ff6b6b");
         this.sfx.hurt();
         this.sfx.hit(true);
         this.telemetry.record("hurt", this.now);
@@ -713,6 +726,15 @@ export class ArenaScene extends Phaser.Scene {
     return this.e.hp / this.boss.hp <= this.boss.phase2.hpPct ? 2 : 1;
   }
 
+  private perk(id: string) {
+    return !!this.run?.perks.includes(id);
+  }
+
+  /** damage of an enemy hit after the boss's tuning multiplier */
+  private bdmg(h: HitDef) {
+    return Math.max(1, Math.round(h.dmg * (this.boss.dmgMul ?? 1) * (this.assist ? HERO.assistDamage : 1)));
+  }
+
   private onDecision(d: Decision) {
     this.hooks?.onDecision?.(d);
     this.note("decision", { kind: d.kind, choice: d.choice, source: d.source, ms: d.latencyMs, error: d.error });
@@ -771,6 +793,13 @@ export class ArenaScene extends Phaser.Scene {
     this.setHudVisible(true);
     this.loadBoss(ENCOUNTERS[Math.min(this.run.bossIndex, ENCOUNTERS.length - 1)]);
     this.e.auto = true;
+  }
+  /** Shrine: keep a perk for the rest of the run. */
+  choosePerk(id: string) {
+    if (!this.run || this.run.perks.includes(id) || this.run.perks.length >= 3) return;
+    this.run.perks.push(id);
+    writeSave(this.run);
+    this.note("perk", { id });
   }
   /** After a victory: the next boss of the run (or back to the first when the run is over and replayed). */
   continueRun() {
@@ -1025,7 +1054,7 @@ export class ArenaScene extends Phaser.Scene {
     this.qte = null;
     this.qteKind = null;
     this.timeScale = 1;
-    const dmg = DEATHBLOW.damage[sum.grade as DeathblowGrade];
+    const dmg = Math.round(this.boss.hp * DEATHBLOW.damage[sum.grade as DeathblowGrade]);
     e.hp = Math.max(0, e.hp - dmg);
     e.posture = 0;
     e.lastHitAt = this.now;
@@ -1069,7 +1098,7 @@ export class ArenaScene extends Phaser.Scene {
       this.popup(this.player.x, this.player.y - 140, "CLASH WON", "#ffd166");
       this.sfx.deflect();
     } else {
-      const dmg = Math.round(c.h.dmg * CLASH.lossDamageFraction);
+      const dmg = Math.round(this.bdmg(c.h) * CLASH.lossDamageFraction);
       p.hp = Math.max(0, p.hp - dmg);
       p.posture = Math.min(HERO.posture, p.posture + CLASH.lossPostureHero);
       p.lastHitAt = this.now;

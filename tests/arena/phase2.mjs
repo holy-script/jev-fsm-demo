@@ -35,19 +35,19 @@ await pressPrompt("J", -25); await pressPrompt("K", -25); await pressPrompt("L",
 await p.waitForTimeout(600); let s = await st();
 let db = s.log.find((l) => l.type === "deathblow");
 check("QTE starts in slow motion when a broken enemy is attacked", slow < 0.5, { slow });
-check("three perfect presses = EXECUTE for 70", db && db.grade === "execute" && db.dmg === 70 && s.ehp === 90, { db, ehp: s.ehp });
+check("three perfect presses = EXECUTE for 20% of boss HP (120 of 600)", db && db.grade === "execute" && db.dmg === 120 && s.ehp === 480, { db, ehp: s.ehp });
 check("execute grants +2 spirit and the player is free again after the finisher", s.spirit >= 2 && s.pmode !== "qte", { spirit: s.spirit, mode: s.pmode });
 
 // B: one perfect, one good (early), one miss = CLEAN (45)
 await setup(); await breakEnemy(); await key("j", 30); await p.waitForFunction(() => window.__arena.qte, null, { timeout: 2000 });
 await pressPrompt("J", -25); await pressPrompt("K", -170); await key_("J"); // third prompt expects L: wrong key = miss
 await p.waitForTimeout(500); s = await st(); db = s.log.find((l) => l.type === "deathblow");
-check("perfect + good + miss = CLEAN for 45", db && db.grade === "clean" && db.perfect === 1 && db.good === 1 && db.miss === 1 && db.dmg === 45, { db });
+check("perfect + good + miss = CLEAN for 12% (72)", db && db.grade === "clean" && db.perfect === 1 && db.good === 1 && db.miss === 1 && db.dmg === 72, { db });
 
 // C: mashing early/wrong = SCUFFED (20)
 await setup(); await breakEnemy(); await key("j", 30); await p.waitForFunction(() => window.__arena.qte, null, { timeout: 2000 });
 await key_("J"); await key_("J"); await key_("J"); await p.waitForTimeout(500); s = await st(); db = s.log.find((l) => l.type === "deathblow");
-check("mashing too early = SCUFFED for 20", db && db.grade === "scuffed" && db.dmg === 20, { db });
+check("mashing too early = SCUFFED for 5% (30)", db && db.grade === "scuffed" && db.dmg === 30, { db });
 
 // D: ignoring the prompts also scuffs it (timeout)
 await setup(); await breakEnemy(); await key("j", 30); await p.waitForFunction(() => window.__arena.qte, null, { timeout: 2000 });
@@ -97,7 +97,7 @@ await setup(); await key("e", 30); await p.waitForTimeout(300); s = await st();
 check("flame burst without spirit does nothing", !s.log.some((l) => l.type === "skill"), s.log);
 await setup(); await p.evaluate(() => (window.__arena.p.spirit = 3)); await key("e", 30); await p.waitForTimeout(1500); s = await st();
 const fh = s.log.find((l) => l.type === "playerHit" && l.id === "FLAME");
-check("flame burst: -2 spirit, hits for 24 and 34 posture", s.log.some((l) => l.type === "skill") && fh && fh.dmg === 24 && s.epost >= 33 && s.spirit < 1.5, { fh, epost: s.epost, spirit: s.spirit });
+check("flame burst: -2 spirit, hits for 24 damage and 34 x0.4 posture (Bladekeeper postureMul)", s.log.some((l) => l.type === "skill") && fh && fh.dmg === 24 && s.epost >= 13 && s.epost <= 15 && s.spirit < 1.5, { fh, epost: s.epost, spirit: s.spirit });
 
 // M: a deflect gives +1 spirit
 await setup(); await enemyAttack("SLASH"); await waitSim(470); await key("Space", 400); await p.waitForTimeout(400); s = await st();

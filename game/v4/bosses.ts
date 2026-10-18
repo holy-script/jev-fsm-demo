@@ -14,6 +14,10 @@ export interface BossDef {
   /** hue rotation in degrees (WebGL colour matrix): recolours a shared sprite so a boss does not look like the player */
   hue?: number;
   hp: number;
+  /** tuning levers (default 1): damage dealt to the player, posture the player's hits add to the boss, and how short its pauses between actions are */
+  dmgMul?: number;
+  postureMul?: number;
+  pace?: number;
   speed: number;
   radius: number;
   clips: { idle: Clip; run: Clip; hit: Clip; broken: Clip; death: Clip };
@@ -49,7 +53,7 @@ const gate = (afterHit: number, extra: GateDef["options"] = []): GateDef => ({
 
 // ------------------------------------------------------------------ Metal Bladekeeper (boss 1)
 const MB: BossDef = {
-  id: "mb", area: "forest", name: "Metal Bladekeeper", title: "The Duelist of Edges", prefix: "mb", nativeDir: 1, hp: 160, speed: 105, radius: 20,
+  id: "mb", area: "forest", name: "Metal Bladekeeper", title: "The Duelist of Edges", prefix: "mb", nativeDir: 1, hp: 600, postureMul: 0.4, speed: 105, radius: 20,
   clips: {
     idle: { sheet: "mb_idle", from: 0, to: 7, fps: 8 }, run: { sheet: "mb_run", from: 0, to: 7, fps: 14 },
     hit: { sheet: "mb_take_hit", from: 0, to: 5, fps: 16 }, broken: { sheet: "mb_take_hit", from: 5, to: 5 }, death: { sheet: "mb_death", from: 0, to: 11, fps: 10 },
@@ -95,7 +99,7 @@ const MB: BossDef = {
 
 // ------------------------------------------------------------------ Crystal Mauler (boss 2)
 const CM: BossDef = {
-  id: "cm", area: "river", name: "Crystal Mauler", title: "Hammer of the Deep Vein", prefix: "cm", nativeDir: 1, hp: 230, speed: 70, radius: 26,
+  id: "cm", area: "river", name: "Crystal Mauler", title: "Hammer of the Deep Vein", prefix: "cm", nativeDir: 1, hp: 800, dmgMul: 0.62, postureMul: 0.3, pace: 0.8, speed: 70, radius: 26,
   clips: {
     idle: { sheet: "cm_idle", from: 0, to: 7, fps: 8 }, run: { sheet: "cm_run", from: 0, to: 7, fps: 11 },
     hit: { sheet: "cm_take_hit", from: 0, to: 5, fps: 16 }, broken: { sheet: "cm_take_hit", from: 5, to: 5 }, death: { sheet: "cm_death", from: 0, to: 14, fps: 10 },
@@ -145,7 +149,7 @@ const CM: BossDef = {
 
 // ------------------------------------------------------------------ Wind Hashashin (boss 3)
 const WH: BossDef = {
-  id: "wh", area: "ruins", name: "Wind Hashashin", title: "The Gale That Cuts", prefix: "wh", nativeDir: 1, hp: 150, speed: 150, radius: 20,
+  id: "wh", area: "ruins", name: "Wind Hashashin", title: "The Gale That Cuts", prefix: "wh", nativeDir: 1, hp: 520, dmgMul: 1.4, postureMul: 0.45, pace: 0.5, speed: 150, radius: 20,
   clips: {
     idle: { sheet: "wh_idle", from: 0, to: 7, fps: 9 }, run: { sheet: "wh_run", from: 0, to: 7, fps: 16 },
     hit: { sheet: "wh_take_hit", from: 0, to: 5, fps: 16 }, broken: { sheet: "wh_take_hit", from: 5, to: 5 }, death: { sheet: "wh_death", from: 0, to: 18, fps: 11 },
@@ -185,7 +189,7 @@ const WH: BossDef = {
 
 // ------------------------------------------------------------------ Echo (final boss): the player's own style, thrown back
 const ECHO: BossDef = {
-  id: "echo", area: "gate", name: "Echo", title: "Your Own Shadow", prefix: "fk", nativeDir: 1, hue: 235, tint: 0xb9a8ff, hp: 200, speed: 125, radius: 18,
+  id: "echo", area: "gate", name: "Echo", title: "Your Own Shadow", prefix: "fk", nativeDir: 1, hue: 235, tint: 0xb9a8ff, hp: 700, dmgMul: 1.2, postureMul: 0.35, pace: 0.6, speed: 125, radius: 18,
   clips: {
     idle: { sheet: "fk_idle", from: 0, to: 7, fps: 8 }, run: { sheet: "fk_run", from: 0, to: 7, fps: 14 },
     hit: { sheet: "fk_take_hit", from: 0, to: 5, fps: 16 }, broken: { sheet: "fk_take_hit", from: 5, to: 5 }, death: { sheet: "fk_death", from: 0, to: 12, fps: 10 },

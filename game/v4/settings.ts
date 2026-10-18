@@ -8,11 +8,13 @@ export interface ArenaSettings {
   music: boolean;
   sfx: number; // 0..1
   shake: boolean;
+  /** combat assist: wider deflect window, bosses deal less damage */
+  assist: boolean;
   /** which brain bosses start with: jev, or the rules bot (for comparison runs) */
   brain: "jev" | "rules";
 }
 const KEY = "arena.settings";
-const DEFAULTS: ArenaSettings = { qte: "on", keymap: DEFAULT_KEYMAP, music: true, sfx: 0.8, shake: true, brain: "jev" };
+const DEFAULTS: ArenaSettings = { qte: "on", keymap: DEFAULT_KEYMAP, music: true, sfx: 0.8, shake: true, assist: false, brain: "jev" };
 
 export function loadSettings(): ArenaSettings {
   let s: ArenaSettings = { ...DEFAULTS, keymap: { ...DEFAULT_KEYMAP } };

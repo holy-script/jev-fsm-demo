@@ -9,11 +9,20 @@ import { listSaves, deleteSave, SLOTS, type RunSave } from "@/game/v4/save";
 import { loadSettings, saveSettings, type ArenaSettings } from "@/game/v4/settings";
 import { aggregate, loadStats, type BrainSummary, type FightRecord } from "@/game/v4/stats";
 import { BOSSES, ENCOUNTERS } from "@/game/v4/bosses";
+import { MAX_PERKS, PERKS, offer } from "@/game/v4/perks";
 
-type Screen = "playing" | "title" | "slots" | "settings" | "stats" | "credits" | "paused" | "victory" | "defeat" | "ending";
+type Screen = "briefing" | "shrine" | "playing" | "title" | "slots" | "settings" | "stats" | "credits" | "paused" | "victory" | "defeat" | "ending";
 type Entry = Decision & { id: number };
 
 const UI = "/arena-assets/env/ui";
+
+/** What the guided demo tells the audience before each boss. */
+const DEMO_NOTES: Record<string, { watch: string[] }> = {
+  mb: { watch: ["Tap guard (Space) just before a dagger lands: a perfect parry rewinds the boss's own swing.", "Open the Jev panel with Tab: every boss decision comes from Jev in about a third of a second, while the boss is still recovering.", "Press F to swap Jev for the old rules bot, then compare them on the stats screen."] },
+  cm: { watch: ["The Mauler telegraphs everything and Jev knows it: watch for DELAY on its slam, a pause that beats players who roll early.", "Two red rings (!!) mean an unblockable move. Press attack just before it lands to counter, or roll through it."] },
+  wh: { watch: ["After the first slash Jev picks how the combo continues. FEINT rewinds the swing to bait a reaction.", "When the boss is staggered, attack: the deathblow asks for three timed key presses."] },
+  echo: { watch: ["Echo uses your own moves. Jev has been watching how you roll, how early you parry and whether you turtle, across every boss.", "Break its posture with parries, then finish it with the deathblow."] },
+};
 const SOURCE_COLOR: Record<string, string> = { jev: "#58a6ff", rules: "#9aa0a6", fallback: "#d29922" };
 
 const CSS = `
@@ -82,6 +91,9 @@ export default function ArenaClient() {
   const [stats, setStats] = useState<FightRecord[]>([]);
   const [result, setResult] = useState<FightResult | null>(null);
   const [panel, setPanel] = useState(false);
+  const [demo, setDemoState] = useState(false);
+  const demoRef = useRef(false);
+  const [perks, setPerks] = useState<string[]>([]);
   const [boss, setBoss] = useState("");
   const [brain, setBrain] = useState<"jev" | "rules">("jev");
   const [decisions, setDecisions] = useState<Entry[]>([]);
@@ -180,14 +192,57 @@ export default function ArenaClient() {
       return next;
     });
   };
-  const start = (slot: number, fresh: boolean) => {
+  const brief = () => { apiRef.current?.pause(); setScreen("briefing"); };
+  const start = (slot: number, fresh: boolean, asDemo = false) => {
+    demoRef.current = asDemo;
+    setDemoState(asDemo);
+    apiRef.current?.setDemo(asDemo);
     apiRef.current?.start(slot, fresh);
     setDecisions([]);
-    setScreen("playing");
+    setPerks(apiRef.current?.perks() ?? []);
+    if (asDemo) { setPanel(true); brief(); } else setScreen("playing");
+  };
+  const goNext = () => {
+    apiRef.current?.next();
+    setDecisions([]);
+    if (demoRef.current) brief(); else setScreen("playing");
+  };
+  /** After a victory: the shrine (a perk) for the first three bosses, then the next fight. */
+  const proceed = () => {
+    const pk = apiRef.current?.perks() ?? [];
+    setPerks(pk);
+    if (result && !result.final && pk.length < MAX_PERKS) setScreen("shrine"); else goNext();
   };
   const resume = () => { apiRef.current?.resume(); setScreen("playing"); };
-  const toTitle = () => { apiRef.current?.toTitle(); refresh(); setScreen("title"); };
+  const toTitle = () => { apiRef.current?.setDemo(false); demoRef.current = false; setDemoState(false); apiRef.current?.toTitle(); refresh(); setScreen("title"); };
   const openFrom = (s: Screen, to: Screen) => { setFrom(s); refresh(); setScreen(to); };
+
+  // keyboard and gamepad navigation for every menu screen
+  useEffect(() => {
+    if (screen === "playing") return;
+    const focusables = () => [...document.querySelectorAll<HTMLElement>(".ar-parch button:not(:disabled), .ar-parch input")];
+    const move = (d: number) => { const els = focusables(); if (!els.length) return; const i = els.indexOf(document.activeElement as HTMLElement); els[(i + d + els.length) % els.length].focus(); };
+    const t = setTimeout(() => focusables()[0]?.focus(), 60);
+    const onKey = (e: KeyboardEvent) => { if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); move(e.key === "ArrowDown" ? 1 : -1); } };
+    window.addEventListener("keydown", onKey);
+    let raf = 0;
+    let prev: boolean[] = (navigator.getGamepads?.()[0]?.buttons ?? []).map((b) => !!b.pressed);
+    const poll = () => {
+      const gp = navigator.getGamepads?.()[0];
+      if (gp) {
+        const down = (i: number) => !!gp.buttons[i]?.pressed;
+        const edge = (i: number) => down(i) && !prev[i];
+        if (edge(13)) move(1);
+        if (edge(12)) move(-1);
+        if (edge(0)) (document.activeElement as HTMLElement | null)?.click();
+        if (edge(1) || edge(9)) window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+        prev = gp.buttons.map((b) => !!b.pressed);
+      }
+      raf = requestAnimationFrame(poll);
+    };
+    raf = requestAnimationFrame(poll);
+    return () => { clearTimeout(t); window.removeEventListener("keydown", onKey); cancelAnimationFrame(raf); };
+  }, [screen]);
 
   const lastSave = saves.filter((s): s is RunSave => !!s && !s.finished).sort((a, b) => b.updated - a.updated)[0];
   const jev = decisions.filter((d) => d.source === "jev");
@@ -223,6 +278,7 @@ export default function ArenaClient() {
             <h1 className="ar-h1">ARENA</h1>
             <div className="ar-sub">a duel decided by Jev</div>
             <button className="ar-btn" disabled={!lastSave} onClick={() => lastSave && start(lastSave.slot, false)} data-testid="continue">Continue{lastSave ? ` (slot ${lastSave.slot}: ${BOSSES[ENCOUNTERS[Math.min(lastSave.bossIndex, ENCOUNTERS.length - 1)]].name})` : ""}</button>
+            <button className="ar-btn" onClick={() => start(1, true, true)} data-testid="demo">Guided demo (about 12 min)</button>
             <button className="ar-btn" onClick={() => openFrom("title", "slots")} data-testid="new-game">New game / load</button>
             <button className="ar-btn" onClick={() => openFrom("title", "settings")}>Settings &amp; controls</button>
             <button className="ar-btn" onClick={() => openFrom("title", "stats")}>Jev vs the rules bot</button>
@@ -253,6 +309,7 @@ export default function ArenaClient() {
 
       {screen === "paused" && center(<>
         <h2 className="ar-h2">Paused</h2>
+        {perks.length > 0 && <div className="ar-sub" data-testid="perks">Gifts: {perks.map((id) => PERKS.find((p) => p.id === id)?.name).join(", ")}</div>}
         <button className="ar-btn" onClick={resume} data-testid="resume">Resume</button>
         <button className="ar-btn" onClick={() => openFrom("paused", "settings")}>Settings &amp; controls</button>
         <button className="ar-btn" onClick={() => openFrom("paused", "stats")}>Jev vs the rules bot</button>
@@ -267,6 +324,7 @@ export default function ArenaClient() {
         <div className="ar-row"><label>Quick-time events</label>
           {(["on", "assist", "off"] as const).map((m) => <button key={m} className={`ar-btn small ${settings.qte === m ? "on" : ""}`} onClick={() => update({ qte: m })} data-testid={`qte-${m}`}>{m === "on" ? "Normal" : m === "assist" ? "Assist" : "Skip"}</button>)}
         </div>
+        <div className="ar-row"><label>Combat assist (wider parry, softer bosses)</label><button className={`ar-btn small ${settings.assist ? "on" : ""}`} onClick={() => update({ assist: !settings.assist })} data-testid="assist">{settings.assist ? "On" : "Off"}</button></div>
         <div className="ar-row"><label>Bosses think with</label>
           {(["jev", "rules"] as const).map((m) => <button key={m} className={`ar-btn small ${settings.brain === m ? "on" : ""}`} onClick={() => update({ brain: m })} data-testid={`brain-${m}`}>{m === "jev" ? "Jev" : "Rules bot"}</button>)}
         </div>
@@ -312,11 +370,30 @@ export default function ArenaClient() {
         <button className="ar-btn" style={{ marginTop: 10 }} onClick={() => setScreen(ending(result) ? "ending" : "title")}>Back</button>
       </>)}
 
+      {screen === "briefing" && center(<>
+        <h2 className="ar-h2" data-testid="briefing">{boss || "Next fight"}</h2>
+        <div className="ar-sub">{demo ? "Guided demo (combat assist is on)" : ""}</div>
+        <div style={{ fontSize: 13, lineHeight: 1.5 }}>
+          {(DEMO_NOTES[Object.values(BOSSES).find((b) => b.name === boss)?.id ?? "mb"]?.watch ?? []).map((w, i) => <p key={i} style={{ margin: "6px 0" }}>• {w}</p>)}
+        </div>
+        <button className="ar-btn" onClick={() => { apiRef.current?.resume(); setScreen("playing"); }} data-testid="begin">Begin the fight</button>
+      </>, 500)}
+
+      {screen === "shrine" && result && center(<>
+        <h2 className="ar-h2" data-testid="shrine">The shrine</h2>
+        <div className="ar-sub">A quiet place between fights. Keep one gift for the rest of the run ({perks.length}/{MAX_PERKS}).</div>
+        {offer(perks, ENCOUNTERS.indexOf(result.boss)).map((pk) => (
+          <button key={pk.id} className="ar-btn" onClick={() => { apiRef.current?.choosePerk(pk.id); setPerks(apiRef.current?.perks() ?? []); goNext(); }} data-testid={`perk-${pk.id}`}>
+            {pk.name}<div style={{ fontWeight: 400, textTransform: "none", letterSpacing: 0, fontSize: 12 }}>{pk.desc}</div>
+          </button>
+        ))}
+      </>, 480)}
+
       {screen === "victory" && result && center(<>
         <h2 className="ar-h2" data-testid="victory">{result.bossName} falls</h2>
         <div className="ar-sub">&ldquo;{result.outro}&rdquo;</div>
         <FightLine r={result.record} />
-        <button className="ar-btn" onClick={() => { apiRef.current?.next(); setDecisions([]); setScreen("playing"); }} data-testid="next">Next: {BOSSES[ENCOUNTERS[Math.min(ENCOUNTERS.indexOf(result.boss) + 1, ENCOUNTERS.length - 1)]].name}</button>
+        <button className="ar-btn" onClick={proceed} data-testid="next">Next: {BOSSES[ENCOUNTERS[Math.min(ENCOUNTERS.indexOf(result.boss) + 1, ENCOUNTERS.length - 1)]].name}</button>
         <button className="ar-btn" onClick={toTitle} data-testid="quit">Quit to title</button>
       </>, 420)}
 
@@ -336,7 +413,7 @@ export default function ArenaClient() {
         <Compare list={stats} />
         <button className="ar-btn" style={{ marginTop: 10 }} onClick={() => setScreen("credits")}>Credits</button>
         <button className="ar-btn" onClick={() => { const sv = saves.find((s) => s?.finished); start(sv?.slot ?? 1, true); }} data-testid="ngplus">New run (the bosses remember you)</button>
-        <button className="ar-btn" onClick={toTitle}>Title</button>
+        <button className="ar-btn" onClick={toTitle} data-testid="quit">Title</button>
       </>, 520)}
 
       {/* Jev strip: always visible while playing; Tab opens the full panel */}
@@ -381,6 +458,7 @@ function FightLine({ r }: { r: FightRecord }) {
     <div style={{ fontSize: 13, margin: "6px 0 10px", lineHeight: 1.5 }} data-testid="fightline">
       Boss ran on <b>{r.brain === "jev" ? "Jev" : r.brain === "rules" ? "the rules bot" : "both brains"}</b> · {Math.round(r.ms / 1000)} s · you lost {r.hpLost} HP<br />
       Attacks thrown {r.thrown}: parried {r.deflected + r.countered}, blocked {r.blocked}, dodged {r.dodged}, landed {r.hit}
+      {r.decisions.jev > 0 && <><br />Jev made {r.decisions.jev} decisions, {Math.round(r.jevMs / r.decisions.jev)} ms each{r.decisions.fallback ? ` (${r.decisions.fallback} fell back to rules)` : ""}</>}
     </div>
   );
 }

@@ -35,7 +35,7 @@ await p.waitForTimeout(1600); let s = await st();
 const atks = s.log.filter((l) => l.type === "attack").map((l) => l.id).join(",");
 const hits = s.log.filter((l) => l.type === "playerHit");
 check("chain L1,L2,L3 plays in order", atks === "L1,L2,L3", { atks });
-check("three hits connect for 8+9+18", hits.length === 3 && s.ehp === 160 - 35, { hits: hits.map((h) => h.dmg), ehp: s.ehp });
+check("three hits connect for 8+9+18", hits.length === 3 && s.ehp === 600 - 35, { hits: hits.map((h) => h.dmg), ehp: s.ehp });
 check("player returns to free after the finisher", s.pmode === "free" && s.chain === 0, s);
 
 // A2: a press made slightly before the chain window still chains (input buffer)
@@ -44,7 +44,7 @@ check("early press (before chainFrom) is buffered into L2", s.log.some((l) => l.
 
 // B: single press = one attack only, then recovery
 await setup(); await key("j", 30); await p.waitForTimeout(1000); s = await st();
-check("single press: L1 only, back to free", s.log.filter((l) => l.type === "attack").length === 1 && s.pmode === "free" && s.ehp === 152, s);
+check("single press: L1 only, back to free", s.log.filter((l) => l.type === "attack").length === 1 && s.pmode === "free" && s.ehp === 592, s);
 
 // C: perfect parry. Press guard just inside the deflect window before the strike.
 await setup(); await enemyAttack("SLASH"); await waitSim(470); await key("Space", 400); await p.waitForTimeout(500); s = await st();

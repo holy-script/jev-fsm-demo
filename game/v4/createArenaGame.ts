@@ -39,6 +39,9 @@ export interface ArenaApi {
   settingsChanged: () => void;
   toggleBrain: () => void;
   clearMemory: () => void;
+  choosePerk: (id: string) => void;
+  setDemo: (on: boolean) => void;
+  perks: () => string[];
 }
 
 /** Loads arena-assets/manifest.json (written by tools/prep_arena_assets.py), then every sheet it names, then starts the arena. */
@@ -104,6 +107,9 @@ export function createArenaGame(parent: HTMLElement, hooks: ArenaHooks): { destr
     },
     settingsChanged: () => game.events.emit("arena:settings"),
     toggleBrain: () => scene().toggleBrain(),
+    choosePerk: (id) => scene().choosePerk(id),
+    setDemo: (on) => { scene().demo = on; },
+    perks: () => scene().run?.perks ?? [],
     clearMemory: () => {
       try {
         localStorage.removeItem("arena.memory");
