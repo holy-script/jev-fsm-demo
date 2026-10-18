@@ -108,6 +108,8 @@ export interface Snapshot {
   memory?: unknown;
   profile?: unknown;
   reachable: Record<string, boolean>;
+  /** the boss's pacing: engage = pressing, disengage = backing off; trend is the gap between the fighters over the last second */
+  spacing: { stance: "engage" | "disengage"; secondsInStance: number; preferredPx: number; trend: "closing" | "holding" | "opening" };
   fairness: { perilousStreak: number; perilousCapped: boolean };
   gate?: { move: string; afterHit: number };
 }
@@ -133,6 +135,7 @@ Rules you must reason with:
 - A SWEEP (marked in a move's description) is a low, unblockable strike along the ground. Rolling does NOT protect against it and neither does guard: only a JUMP clears it. A player who leaps it can answer with an air attack (a jump counter) that rewinds your swing and takes a lot of posture. Players who never jump are punished by sweeps; players who jump on cue should see them less often and be baited with other moves.
 - The player can also DASH (a short burst with a brief invulnerable start, good for spacing) and attack from the air. Nothing they do in the air protects them from a normal strike, so a ground attack aimed at a jumping player still hits.
 - Moves with a branch point (gate) let you choose how the combo continues after the first hit. DELAY beats early guard taps. FEINT rewinds your swing and baits a reaction. CONTINUE is the default.
+- You have a RHYTHM: you ENGAGE (stay close, a few attacks) and then DISENGAGE (back away, circle, wait) so the fight breathes. snapshot.spacing says which stance you are in and for how long. While disengaged use CIRCLE or WAIT (or a ranged move if you have one) and let the player come to you or re-engage with APPROACH; RETREAT early when the player crowds you or after a combo; do not stay glued to the player.
 - If two of your attacks clash with the player's swing in the same instant, a mash decides who is thrown back.
 - snapshot.habits says how this player rolls (toward/away/sideways), how early they tap guard (guardTapLeadMs: large means they tap early, so delayed hits beat them) and whether they swing into your recovery or into your wind-up. snapshot.memory and snapshot.profile, when present, are what you learned in earlier fights: use it from your very first move.
 - snapshot.fairness: you may not throw a third perilous move in a row; when perilousCapped is true they are simply not on offer.

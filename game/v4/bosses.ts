@@ -29,11 +29,28 @@ export interface BossDef {
   taunts?: { id: string; text: string; when: string }[];
   intro: string;
   outro: string;
+  /** the ebb and flow: how it paces pressure and distance (defaults in DEFAULT_SPACING) */
+  spacing?: Partial<Spacing>;
   /** below hpPct of max HP the boss gets faster and shorter-winded */
   phase2: { hpPct: number; speed: number; cooldown: number; hold: number };
 }
 
+/** A boss alternates two stances: it ENGAGES (stays near, throws a few attacks) and DISENGAGES (backs away, circles, waits) so a fight has a rhythm
+ *  instead of a boss glued to the player. Distances are px between the fighters. */
+export interface Spacing {
+  engage: number;
+  disengage: number;
+  /** a boss that is not attacking will not stay closer than this */
+  personal: number;
+  engageMs: [number, number];
+  disengageMs: [number, number];
+  attacksPerEngage: [number, number];
+}
+export const DEFAULT_SPACING: Spacing = { engage: 100, disengage: 240, personal: 84, engageMs: [4500, 7500], disengageMs: [1400, 2600], attacksPerEngage: [2, 4] };
+
 export const GENERIC_ACTIONS: Record<string, string> = {
+  RETREAT: "Back away from the player to about 240 px, still facing them. Breaks their momentum, resets spacing and baits an approach you can punish. Use after a combo or when the player is crowding you.",
+  CIRCLE: "Strafe around the player at medium range to change the angle and bait a reaction. Good for watching what the player does before you commit.",
   APPROACH: "Walk toward the player to close the distance.",
   BACKSTEP: "Step back to reset spacing or bait the player into overextending.",
   WAIT: "Stand still for a moment, watching. Use RARELY: only to bait a player who is rushing in or to break a rhythm. A boss that keeps waiting is passive and boring; when an attack is on offer and fits, prefer the attack.",
@@ -227,6 +244,18 @@ const ECHO: BossDef = {
   phase2: { hpPct: 0.5, speed: 1.15, cooldown: 0.75, hold: 0.8 },
 };
 
+/** Give the rules bot some dance: retreat and circle weights per distance band (scaled per boss). */
+function dance(b: BossDef, retreat: number, circle: number) {
+  b.weights.close.push(["RETREAT", retreat], ["CIRCLE", circle * 0.8]);
+  b.weights.mid.push(["CIRCLE", circle * 1.2], ["RETREAT", retreat * 0.4]);
+  b.weights.far.push(["CIRCLE", circle * 0.6]);
+}
+dance(MB, 1, 1);
+dance(CM, 0.5, 0.5);
+dance(WH, 1.5, 2);
+dance(ECHO, 1, 1);
+CM.spacing = { engage: 105, disengage: 200, personal: 90, engageMs: [6500, 9500], disengageMs: [1000, 1700], attacksPerEngage: [3, 5] };
+WH.spacing = { engage: 95, disengage: 270, personal: 80, engageMs: [2500, 4200], disengageMs: [1300, 2300], attacksPerEngage: [1, 3] };
 export const BOSSES: Record<string, BossDef> = { mb: MB, cm: CM, wh: WH, echo: ECHO };
 /** Order of the demo run. */
 export const ENCOUNTERS = ["mb", "cm", "wh", "echo"];

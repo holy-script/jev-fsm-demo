@@ -6,7 +6,7 @@ import {
 } from "./data";
 import { AREAS } from "./areas";
 import { AreaView } from "./world";
-import { BOSSES, ENCOUNTERS, GENERIC_ACTIONS, type BossDef } from "./bosses";
+import { BOSSES, DEFAULT_SPACING, ENCOUNTERS, GENERIC_ACTIONS, type BossDef, type Spacing } from "./bosses";
 import { BossBrain, Telemetry, type Decision, type Snapshot } from "./brain";
 import { Fighter } from "./fighter";
 import { Sfx } from "./sfx";
@@ -64,7 +64,7 @@ export class ArenaScene extends Phaser.Scene {
   };
   e = {
     hp: 160, posture: 0, mode: "idle" as EMode, auto: true, atk: null as EnemyAttack | null, hitDone: [] as boolean[], thinkAt: 0,
-    cd: {} as Record<string, number>, leapAt: -1e9, action: null as { id: string; until: number } | null, lastActions: [] as string[], gate: null as { a: EnemyAttack; startedAt: number; decision: string | null; token: number } | null, resumeAt: 0, feinting: false, phase2: false, recoilUntil: 0, brokenUntil: 0, poiseUntil: 0, lastHitAt: -1e9, dash: 0, reverseFrames: 0, reversedAttack: "", strikeAt: 0,
+    cd: {} as Record<string, number>, stance: "engage" as "engage" | "disengage", stanceUntil: 0, stanceAt: 0, stanceAttacks: 0, stanceCap: 3, circleDir: 1, circleUntil: 0, rushUntil: 0, leapAt: -1e9, action: null as { id: string; until: number } | null, lastActions: [] as string[], gate: null as { a: EnemyAttack; startedAt: number; decision: string | null; token: number } | null, resumeAt: 0, feinting: false, phase2: false, recoilUntil: 0, brokenUntil: 0, poiseUntil: 0, lastHitAt: -1e9, dash: 0, reverseFrames: 0, reversedAttack: "", strikeAt: 0,
   };
 
   private keys!: Record<string, Phaser.Input.Keyboard.Key>;
@@ -96,6 +96,7 @@ export class ArenaScene extends Phaser.Scene {
   hooks?: ArenaHooks;
   private gateToken = 0;
   private standingStill = 0;
+  private distHist: { t: number; d: number }[] = [];
   private lastTaunt = -1e9;
   private remembered = false;
 
@@ -167,7 +168,7 @@ export class ArenaScene extends Phaser.Scene {
     Object.assign(this.p, { vz: 0, airAtk: false, dashDone: 0, dashCdUntil: 0, jumpCdUntil: 0, landUntil: 0 });
     this.player.z = 0;
     this.player.stopTrail();
-    Object.assign(this.e, { hp: this.boss.hp, posture: 0, mode: "idle", leapAt: -1e9, atk: null, hitDone: [], thinkAt: 1200, cd: {}, recoilUntil: 0, brokenUntil: 0, poiseUntil: 0, lastHitAt: -1e9, dash: 0, reverseFrames: 0, reversedAttack: "", strikeAt: 0, action: null, lastActions: [], gate: null, resumeAt: 0, feinting: false, phase2: false });
+    Object.assign(this.e, { hp: this.boss.hp, posture: 0, mode: "idle", stance: "engage", stanceUntil: 0, stanceAt: 0, stanceAttacks: 0, circleUntil: 0, rushUntil: 0, leapAt: -1e9, atk: null, hitDone: [], thinkAt: 1200, cd: {}, recoilUntil: 0, brokenUntil: 0, poiseUntil: 0, lastHitAt: -1e9, dash: 0, reverseFrames: 0, reversedAttack: "", strikeAt: 0, action: null, lastActions: [], gate: null, resumeAt: 0, feinting: false, phase2: false });
     this.telemetry.reset();
     this.brain.reset();
     this.brain.mode = this.settings.brain; // every new fight starts on the brain chosen in Settings (F still swaps it mid-fight)
@@ -221,6 +222,10 @@ export class ArenaScene extends Phaser.Scene {
     this.enemy.tick(dt);
     this.area?.update(raw);
     this.updateQte(raw);
+    if (!this.distHist.length || this.now - this.distHist[this.distHist.length - 1].t >= 100) {
+      this.distHist.push({ t: this.now, d: Math.abs(this.enemy.x - this.player.x) });
+      while (this.distHist.length && this.now - this.distHist[0].t > 1200) this.distHist.shift();
+    }
     this.drawHud();
   }
 
@@ -626,6 +631,7 @@ export class ArenaScene extends Phaser.Scene {
     const e = this.e;
     e.mode = "attack";
     e.atk = a;
+    e.stanceAttacks++;
     e.hitDone = a.hits.map(() => false);
     e.cd[a.id] = this.now + a.cooldownMs * (this.phase() === 2 ? this.boss.phase2.cooldown : 1);
     this.enemy.face = this.player.x >= this.enemy.x ? 1 : -1;
@@ -982,6 +988,13 @@ export class ArenaScene extends Phaser.Scene {
     this.note("taunt", { text });
   }
 
+  private distTrend(): "closing" | "holding" | "opening" {
+    const h = this.distHist;
+    if (h.length < 4) return "holding";
+    const d = h[h.length - 1].d - h[0].d;
+    return d < -18 ? "closing" : d > 18 ? "opening" : "holding";
+  }
+
   /** Attacks Jev may pick right now (in range, off cooldown, fairness) plus the generic movement actions. */
   availableActions(): string[] {
     const e = this.e, f = this.enemy;
@@ -994,8 +1007,17 @@ export class ArenaScene extends Phaser.Scene {
       if (a.perilous && capped) continue;
       out.push(a.id);
     }
-    if (dist > 100 || dy > 35) out.push("APPROACH");
-    if (dist < 150) out.push("BACKSTEP");
+    const sp = this.spacingOf();
+    if (e.stance === "engage") {
+      if (dist > 100 || dy > 35) out.push("APPROACH");
+      if (dist < 150) out.push("BACKSTEP");
+      if (dist < 170) out.push("RETREAT");
+      if (dist >= 60 && dist <= 240) out.push("CIRCLE");
+    } else {
+      // disengaged: no walking back in until the stance ends; back off if crowded, otherwise circle
+      if (dist < sp.disengage - 20) out.push("RETREAT");
+      if (dist >= 60) out.push("CIRCLE");
+    }
     out.push("WAIT");
     return out;
   }
@@ -1018,6 +1040,7 @@ export class ArenaScene extends Phaser.Scene {
       habits: this.telemetry.habits(),
       memory: memoryFor(this.memory, this.boss.id),
       reachable,
+      spacing: { stance: e.stance, secondsInStance: Math.round((this.now - e.stanceAt) / 100) / 10, preferredPx: e.stance === "engage" ? this.spacingOf().engage : this.spacingOf().disengage, trend: this.distTrend() },
       fairness: { perilousStreak: lastTwo.filter(Boolean).length, perilousCapped: lastTwo.length === 2 && lastTwo.every(Boolean) },
     };
     if (this.boss.id === "echo") snap.profile = profile(this.memory);
@@ -1025,21 +1048,86 @@ export class ArenaScene extends Phaser.Scene {
     return snap;
   }
 
+  private spacingOf(): Spacing {
+    return { ...DEFAULT_SPACING, ...(this.boss.spacing ?? {}) };
+  }
+
+  private setStance(s: "engage" | "disengage") {
+    const e = this.e, sp = this.spacingOf();
+    const r = (a: [number, number]) => a[0] + Math.random() * (a[1] - a[0]);
+    e.stance = s;
+    e.stanceAt = this.now;
+    e.stanceAttacks = 0;
+    e.stanceUntil = this.now + r(s === "engage" ? sp.engageMs : sp.disengageMs);
+    e.stanceCap = Math.max(1, Math.round(r(sp.attacksPerEngage)));
+    if (s === "engage") e.rushUntil = this.now + 700; // coming back in is quick
+    this.note("stance", { stance: s });
+  }
+
+  /** The macro rhythm: press for a few attacks, back off for a moment, come back. Only switches between actions. */
+  private updateStance() {
+    const e = this.e;
+    if (e.stanceUntil === 0) return this.setStance("engage");
+    if (e.stance === "engage" && (this.now >= e.stanceUntil || e.stanceAttacks >= e.stanceCap)) this.setStance("disengage");
+    else if (e.stance === "disengage" && this.now >= e.stanceUntil) this.setStance("engage");
+  }
+
+  /** The run cycle played backwards: the boss backs away while still facing the player. */
+  private runBack() {
+    const r = this.boss.clips.run;
+    return { ...r, from: r.to, to: r.from };
+  }
+
+  /** Micro movement between actions: personal space when engaged; hold the gap and drift sideways when disengaged. Returns true if it moved. */
+  private spacingMove(dt: number, spd: number, dx: number, dist: number): boolean {
+    const e = this.e, f = this.enemy, sp = this.spacingOf();
+    const away = -Math.sign(dx) || 1;
+    if (e.stance === "engage") {
+      if (dist >= sp.personal) return false;
+      this.step(f, (away * spd * 0.85 * dt) / 1000, 0);
+      f.ensure(this.runBack());
+      return true;
+    }
+    if (dist < sp.disengage - 20) {
+      this.step(f, (away * spd * dt) / 1000, 0);
+      f.ensure(this.runBack());
+      return true;
+    }
+    if (this.now >= e.circleUntil) {
+      e.circleDir = Math.random() < 0.5 ? 1 : -1;
+      e.circleUntil = this.now + 900 + Math.random() * 700;
+    }
+    if (f.y <= 276) e.circleDir = 1;
+    if (f.y >= 494) e.circleDir = -1;
+    this.step(f, 0, (e.circleDir * spd * 0.4 * dt) / 1000);
+    f.ensure(this.boss.clips.run);
+    return true;
+  }
+
   /** Idle: pick the next action. The answer is requested while the boss is still recovering so it is usually ready when the pause ends. */
   private enemyThink(dt: number) {
-    const e = this.e, f = this.enemy;
+    const e = this.e, f = this.enemy, sp = this.spacingOf();
     const dx = this.player.x - f.x, dy = this.player.y - f.y, dist = Math.abs(dx);
     const spd = this.boss.speed * (this.phase() === 2 ? this.boss.phase2.speed : 1);
-    // an ongoing walk / wait / backstep
+    const away = -Math.sign(dx) || 1;
+    // an ongoing explicit action
     if (e.action) {
       const act = e.action;
       if (act.id === "APPROACH") {
         const m = Math.hypot(dx, dy) || 1;
-        this.step(f, dist > 90 ? ((dx / m) * spd * dt) / 1000 : 0, ((dy / m) * spd * 0.6 * dt) / 1000);
+        const rush = this.now < e.rushUntil ? 1.5 : 1;
+        this.step(f, dist > sp.engage - 10 ? ((dx / m) * spd * rush * dt) / 1000 : 0, ((dy / m) * spd * 0.6 * dt) / 1000);
         f.ensure(this.boss.clips.run);
-        if ((dist <= 100 && Math.abs(dy) <= 30) || this.now >= act.until) e.action = null;
-      } else if (act.id === "BACKSTEP") {
-        this.step(f, (-Math.sign(dx) * spd * 0.9 * dt) / 1000, 0);
+        if ((dist <= sp.engage + 5 && Math.abs(dy) <= 30) || this.now >= act.until) e.action = null;
+      } else if (act.id === "BACKSTEP" || act.id === "RETREAT") {
+        this.step(f, (away * spd * (act.id === "RETREAT" ? 1 : 0.9) * dt) / 1000, 0);
+        f.ensure(this.runBack());
+        if (this.now >= act.until || (act.id === "RETREAT" && dist >= sp.disengage - 15)) e.action = null;
+      } else if (act.id === "CIRCLE") {
+        if (f.y <= 276) e.circleDir = 1;
+        if (f.y >= 494) e.circleDir = -1;
+        const want = e.stance === "engage" ? sp.engage + 50 : sp.disengage;
+        this.step(f, dist > want + 30 ? Math.sign(dx) * spd * 0.5 * dt / 1000 : dist < want - 30 ? away * spd * 0.5 * dt / 1000 : 0, (e.circleDir * spd * 0.65 * dt) / 1000);
         f.ensure(this.boss.clips.run);
         if (this.now >= act.until) e.action = null;
       } else {
@@ -1049,7 +1137,8 @@ export class ArenaScene extends Phaser.Scene {
       if (!e.action) e.thinkAt = this.now + 150;
       return;
     }
-    f.ensure(this.boss.clips.idle);
+    this.updateStance();
+    if (!this.spacingMove(dt, spd, dx, dist)) f.ensure(this.boss.clips.idle);
     const avail = this.availableActions();
     if (this.brain.needsRequest) this.brain.request(this.boss, this.snapshot(avail), avail);
     if (this.now < e.thinkAt) return;
@@ -1071,7 +1160,9 @@ export class ArenaScene extends Phaser.Scene {
     }
     if (a) return this.startEnemyAttack(a);
     if (!(d.choice in GENERIC_ACTIONS)) return;
-    const ms = d.choice === "APPROACH" ? 1600 : d.choice === "BACKSTEP" ? 450 : 650;
+    const ms = { APPROACH: 1600, BACKSTEP: 450, RETREAT: 1000, CIRCLE: 1100 }[d.choice as "APPROACH"] ?? 650;
+    if (d.choice === "RETREAT" && e.stance === "engage") this.setStance("disengage");
+    if (d.choice === "APPROACH" && e.stance === "disengage") this.setStance("engage");
     e.action = { id: d.choice, until: this.now + ms };
   }
 
