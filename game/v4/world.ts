@@ -24,7 +24,7 @@ export class AreaView {
     let gi = 0;
     for (const s of def.stamps) {
       const img = add(scene.add.image(s.x, s.y, s.k).setOrigin(0.5, 1).setScale(ENV_SCALE * (s.s ?? 1)).setFlipX(!!s.flip).setAlpha(s.alpha ?? 1));
-      img.setDepth(s.g ? 1 + 0.001 * gi++ : 10 + s.y / 100);
+      img.setDepth(s.g ? 1 + 0.001 * gi++ : 20 + s.y / 100);
     }
     if (def.portal) {
       if (!scene.anims.exists("env_portal")) scene.anims.create({ key: "env_portal", frames: scene.anims.generateFrameNumbers("env_portal", { start: 0, end: 31 }), frameRate: 14, repeat: -1 });
