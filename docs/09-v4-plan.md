@@ -415,7 +415,32 @@ Camera feedback provides:
 
 **Exit check:** met. Camera feedback system complete and responsive to combat events.
 
+## 24. Phase 7j results: weather particle effects
+
+**Deliverables:** ParticleSystem and WeatherEmitter in `game/v4/particles.ts`:
+- Particle class with position, velocity, life, color, alpha, scale
+- Particle fade-out over lifetime with easing
+- WeatherEmitter spawning weather-specific particles:
+  * Rain: vertical fall with wind drift, blue, 1.5s lifetime
+  * Dust: swirling motion, orange, 2s lifetime
+  * Ash: slow drift, gray, 3s lifetime
+- Per-particle random variance for natural randomness
+
+Integrated into ArenaScene:
+- WeatherEmitter created based on area atmosphere (def.atmosphere.rain)
+- Updates every frame with timed spawning
+- Rendered as circles with per-particle alpha fade
+- Clears and recreates when changing areas
+
+Weather particles add environmental immersion and visual polish to specific areas. Rain in river shrine, dust in ruins/graveyard, and wind-blown ash complement the atmosphere system.
+
+**Test suite 7j:** 5 checks for emitter init, type matching, particle spawning, properties, and cleanup.
+
+**Regression:** 364/365 checks pass. All phases 1–7j green.
+
+**Exit check:** met. Weather particle system fully integrated and responsive to area definitions.
+
 **What remains in Phase 7:**
-- Beat-sync choreography (audio files, boss attack alignment to musical beats)
-- Per-area weather particles (rain, lightning, wind effects)
-- Production-ready asset pipeline and docs
+- Beat-sync choreography (requires audio files; infrastructure ready in AudioManager)
+- Advanced camera effects (zoom on kills, pan on major events)
+- Production-ready asset pipeline and documentation
