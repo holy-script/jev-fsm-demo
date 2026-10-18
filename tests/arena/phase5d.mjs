@@ -16,7 +16,7 @@ await p.evaluate(() => { const d = window.__arena; d.e.auto = false; d.e.thinkAt
 const names = await p.evaluate(() => ({ n: window.__arena.texts.enemyName.text, t: window.__arena.texts.enemyTitle.text }));
 check("the name plate shows the boss name and the title under the bar", names.n === "Wind Hashashin" && names.t === "The Gale That Cuts", names);
 const objs = await p.evaluate(() => ({ plates: window.__arena.hudObjects.filter((o) => o.type === "NineSlice").length, banner: window.__arena.hudObjects.filter((o) => o.texture?.key === "ui_44").length, pips: window.__arena.pips.length }));
-check("two nine-slice plates, a parchment banner and five spirit flames exist", objs.plates === 2 && objs.banner === 1 && objs.pips === 5, objs);
+check("five nine-slice plates (HP bars + skill slots), a parchment banner and five spirit flames exist", objs.plates === 5 && objs.banner === 1 && objs.pips === 5, objs);
 
 await p.evaluate(() => { window.__arena.p.spirit = 2.5; }); await p.waitForTimeout(150);
 const pips = await p.evaluate(() => window.__arena.pips.map((i) => i.texture.key));

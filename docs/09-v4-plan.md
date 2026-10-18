@@ -304,3 +304,11 @@ Requested after the first look at the demo (eight points). Each point, what exis
 **Rules for the build:** every new mechanic is data first (`data.ts`, `bosses.ts`, `areas.ts`), gets a test, and gets a Jev description if the boss uses it; boss options stay filtered by legality; nothing may require new art we do not have (dash and teleports use existing frames with afterimages); controls stay rebindable and pad-operable; the existing suites' numbers are only changed where a mechanic truly changes them (sweeps vs roll).
 
 **Non-goals:** two-player or networking; new characters; a new tileset; replacing Jev's question format.
+
+## 17. Phase 7c results: fire skills and projectile system
+
+**Deliverables:** Projectile entity system (ProjectileSystem in `game/v4/projectiles.ts`), Ember Bolt (Q, ranged projectile, 1 spirit), Inferno Ring (R, area blast, 3 spirit), three-slot skill bar with cooldown UI, Kindled perk applies to Ember Bolt and Inferno Ring (cost -1). Projectiles spawn at the player's hand, travel with z-axis (jump clears at z > 25), trail afterimages, reflect on perfect parry, and despawn on boss hit. Perfect parry reflect grants +1 spirit. Jev's snapshot and rules text updated with projectile descriptions; the bot does not yet throw projectiles (learned in 7d).
+
+**Test suite 7c:** 32 checks covering projectile spawn/travel/hit/reflect, skill bar visibility and cooldown, spirit cost, kindled perk, and reflect grant. Regression of phases 1–6 and 7a–7b all green (332 total checks, all pass).
+
+**Exit check:** met. Every mechanic tested; full regression green; Jev told about projectiles; control binding and gamepad support complete; skill bar HUD displays icons and cooldowns per bound key.

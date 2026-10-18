@@ -1,7 +1,7 @@
 import * as Phaser from "phaser";
 import { chip, inReach, pressGuard, resolveEnemyHit, type Defender, type Outcome } from "./combat";
 import {
-  AIR_ATTACK, JUMP_COUNTER, CLASH, COUNTER, DEATHBLOW, ENEMY, GATE_WAIT, FX, FX_EXTRA, HERO, HERO_ATTACKS, HERO_CLIPS, SCALE, SKILLS, VIEW_H, VIEW_W,
+  AIR_ATTACK, BOLT, EMISSIVE_DEPTH, NOVA, JUMP_COUNTER, CLASH, COUNTER, DEATHBLOW, ENEMY, GATE_WAIT, FX, FX_EXTRA, HERO, HERO_ATTACKS, HERO_CLIPS, SCALE, SKILLS, VIEW_H, VIEW_W,
   type EnemyAttack, type HitDef, type PlayerAttack,
 } from "./data";
 import { AREAS } from "./areas";
@@ -9,6 +9,7 @@ import { AreaView } from "./world";
 import { BOSSES, DEFAULT_SPACING, ENCOUNTERS, GENERIC_ACTIONS, type BossDef, type Spacing } from "./bosses";
 import { BossBrain, Telemetry, type Decision, type Snapshot } from "./brain";
 import { Fighter } from "./fighter";
+import { ProjectileSystem, type Projectile } from "./projectiles";
 import { Sfx } from "./sfx";
 import { addRecord, loadStats, saveStats, type BrainTag, type FightRecord } from "./stats";
 import { deleteSave, loadSave, newRun, writeSave, type RunSave } from "./save";
@@ -25,7 +26,7 @@ import { Vfx } from "./vfx";
  *  WASD/arrows move, J or click attack (press again inside the chain window), Space/K guard (tap just before a hit = perfect parry),
  *  Shift/L roll. Dev: P toggles the enemy AI, O/I force its attacks, R resets. */
 
-type PMode = "free" | "attack" | "guard" | "roll" | "hurt" | "dead" | "qte" | "air" | "dash" | "land";
+type PMode = "free" | "attack" | "guard" | "roll" | "hurt" | "dead" | "qte" | "air" | "dash" | "land" | "cast";
 type EMode = "idle" | "attack" | "recoil" | "flinch" | "broken" | "dead";
 export interface ArenaLogEntry {
   t: number;
@@ -53,6 +54,9 @@ export class ArenaScene extends Phaser.Scene {
   player!: Fighter;
   enemy!: Fighter;
   vfx!: Vfx;
+  projs!: ProjectileSystem;
+  private lastEnemyOutcome: Outcome | null = null;
+  private slots: { action: "skill" | "bolt" | "nova"; base: number; icon: Phaser.GameObjects.Image; key: Phaser.GameObjects.Text; cost: Phaser.GameObjects.Text }[] = [];
   dev = false;
 
   p = {
@@ -60,6 +64,7 @@ export class ArenaScene extends Phaser.Scene {
     queued: false, earlyAt: -1e9, recovering: false, dash: 0, invulnUntil: 0, rollStart: 0, rollCdUntil: 0, rollDir: { x: 1, y: 0 },
     hurtUntil: 0, lastHitAt: -1e9, riposteUntil: 0, spirit: 0, counterAt: -1e9,
     vz: 0, airAtk: false, dashStart: 0, dashDone: 0, dashDir: { x: 1, y: 0 }, dashCdUntil: 0, jumpCdUntil: 0, landUntil: 0,
+    boltCdUntil: 0, novaCdUntil: 0, castKind: null as null | "bolt" | "nova", castReleaseAt: 0, castUntil: 0, castDone: false,
     def: { guarding: false, guardPressedAt: -1e9, noDeflect: false, invulnerable: false, rolling: false } as Defender,
   };
   e = {
@@ -111,6 +116,7 @@ export class ArenaScene extends Phaser.Scene {
     this.settings = loadSettings();
     this.cameras.main.setBackgroundColor("#101a14");
     this.vfx = new Vfx(this, this.manifest.vfx);
+    this.projs = new ProjectileSystem(this, this.vfx);
     this.hooks = this.registry.get("hooks") as ArenaHooks | undefined;
     this.memory = loadMemory();
     this.brain = new BossBrain({ onDecision: (d) => this.onDecision(d) });
@@ -131,7 +137,7 @@ export class ArenaScene extends Phaser.Scene {
     this.texts.enemyName.setOrigin(0.5, 0.5).setFontStyle("bold");
     t("enemyTitle", VIEW_W / 2, 110, 12, "#e8dcc0", 0.5);
     this.texts.enemyTitle.setStroke("#000", 3).setFontStyle("italic");
-    t("combo", 332, VIEW_H - 76, 26, "#ffd166");
+    t("combo", 330, VIEW_H - 124, 26, "#ffd166");
     this.texts.combo.setStroke("#000", 4).setFontStyle("bold");
     t("help", 12, VIEW_H - 22, 11, "#8b949e");
     t("debug", 12, 8, 11, "#58a6ff");
@@ -165,7 +171,8 @@ export class ArenaScene extends Phaser.Scene {
     this.player.anim.speed = 1;
     this.enemy.anim.speed = 1;
     Object.assign(this.p.def, { guarding: false, guardPressedAt: -1e9, noDeflect: false, invulnerable: false, rolling: false });
-    Object.assign(this.p, { vz: 0, airAtk: false, dashDone: 0, dashCdUntil: 0, jumpCdUntil: 0, landUntil: 0 });
+    Object.assign(this.p, { vz: 0, airAtk: false, dashDone: 0, dashCdUntil: 0, jumpCdUntil: 0, landUntil: 0, boltCdUntil: 0, novaCdUntil: 0, castKind: null, castDone: false });
+    this.projs.clear();
     this.player.z = 0;
     this.player.stopTrail();
     Object.assign(this.e, { hp: this.boss.hp, posture: 0, mode: "idle", stance: "engage", stanceUntil: 0, stanceAt: 0, stanceAttacks: 0, circleUntil: 0, rushUntil: 0, leapAt: -1e9, atk: null, hitDone: [], thinkAt: 1200, cd: {}, recoilUntil: 0, brokenUntil: 0, poiseUntil: 0, lastHitAt: -1e9, dash: 0, reverseFrames: 0, reversedAttack: "", strikeAt: 0, action: null, lastActions: [], gate: null, resumeAt: 0, feinting: false, phase2: false });
@@ -217,6 +224,7 @@ export class ArenaScene extends Phaser.Scene {
     if (Phaser.Input.Keyboard.JustDown(this.keys.I)) this.forceEnemyAttack("TWIN");
     this.updatePlayer(dt);
     this.updateEnemy(dt);
+    this.updateProjectiles(dt);
     this.separate();
     this.player.tick(dt);
     this.enemy.tick(dt);
@@ -274,7 +282,7 @@ export class ArenaScene extends Phaser.Scene {
   // ---------------------------------------------------------------- player
   private updatePlayer(dt: number) {
     const p = this.p, f = this.player;
-    const press = { attack: this.frame.attack, guard: this.frame.guard, roll: this.frame.roll, skill: this.frame.skill, jump: this.frame.jump, dash: this.frame.dash };
+    const press = { attack: this.frame.attack, guard: this.frame.guard, roll: this.frame.roll, skill: this.frame.skill, jump: this.frame.jump, dash: this.frame.dash, bolt: this.frame.bolt, nova: this.frame.nova };
     if (press.attack) p.counterAt = this.now; // a perilous strike landing within COUNTER ms of this is countered
     if (press.attack) {
       this.telemetry.react("attack", this.now);
@@ -310,6 +318,8 @@ export class ArenaScene extends Phaser.Scene {
         if (press.dash && this.now >= p.dashCdUntil) return this.startDash(dir);
         if (press.guard) return this.startGuard();
         if (press.skill) return this.startSkill("FLAME");
+        if (press.bolt) return this.startBolt();
+        if (press.nova) return this.startNova();
         if (press.attack) return this.canDeathblow() ? this.startDeathblow() : this.startAttack("L1");
         if (dir.any) {
           this.step(f, (dir.x * HERO.speed * dt) / 1000, (dir.y * HERO.speed * dt) / 1000);
@@ -365,6 +375,7 @@ export class ArenaScene extends Phaser.Scene {
         f.z += (p.vz * dt) / 1000;
         if (dir.any) this.step(f, (dir.x * HERO.airSpeed * dt) / 1000, (dir.y * HERO.airSpeed * dt) / 1000);
         if (press.attack && !p.atk && !p.airAtk) return this.startAirAttack();
+        if (press.bolt && !p.atk) this.startBolt();
         if (p.atk) this.playerHits(p.atk, f.anim.frame);
         else {
           const c = p.vz > 0 ? HERO_CLIPS.jumpUp : HERO_CLIPS.jumpDown;
@@ -380,6 +391,17 @@ export class ArenaScene extends Phaser.Scene {
         p.dashDone = target;
         this.step(f, p.dashDir.x * stepPx, p.dashDir.y * stepPx);
         if (u >= 1) p.mode = "free";
+        break;
+      }
+      case "cast": {
+        if (!p.castDone && this.now >= p.castReleaseAt) this.releaseCast();
+        if (this.now >= p.castUntil) {
+          p.mode = "free";
+          p.castKind = null;
+        } else if (p.castDone) {
+          if (press.roll && this.now >= p.rollCdUntil) return this.startRoll(dir);
+          if (press.dash && this.now >= p.dashCdUntil) return this.startDash(dir);
+        }
         break;
       }
       case "land": {
@@ -473,9 +495,147 @@ export class ArenaScene extends Phaser.Scene {
     this.note("dash", { back });
   }
 
+  /** What a skill costs after the Kindled Blade gift. */
+  skillCost(base: number) {
+    return this.perk("kindled") ? Math.max(1, base - 1) : base;
+  }
+
+  // ---- fire skills: Ember Bolt (a projectile) and Inferno Ring (an explosion around the knight)
+  private startBolt() {
+    const p = this.p, f = this.player;
+    const cost = this.skillCost(BOLT.cost);
+    if (p.spirit < cost || this.now < p.boltCdUntil || this.e.mode === "dead") return;
+    p.spirit -= cost;
+    p.boltCdUntil = this.now + BOLT.cdMs;
+    this.telemetry.record("skill", this.now);
+    this.note("skill", { id: "BOLT", spirit: p.spirit });
+    this.sfx.skill();
+    if (p.mode === "air") return this.spawnBolt(); // thrown from the air: no wind-up, no lock
+    p.mode = "cast";
+    p.atk = null;
+    p.chain = 0;
+    p.def.guarding = false;
+    p.castKind = "bolt";
+    p.castDone = false;
+    p.castReleaseAt = this.now + BOLT.releaseMs;
+    p.castUntil = this.now + BOLT.castMs;
+    f.play(BOLT.clip);
+  }
+
+  private spawnBolt() {
+    const f = this.player, dx = this.enemy.x >= f.x ? 1 : -1;
+    const vy = Phaser.Math.Clamp((this.enemy.y - f.y) * 1.1, -130, 130);
+    this.projs.spawn({ id: "BOLT", owner: "player", look: "ember", x: f.x + dx * 54, y: f.y, z: f.z + 30, vx: dx * BOLT.speed, vy, dmg: BOLT.dmg, posture: BOLT.posture, radius: BOLT.radius, life: BOLT.life });
+    this.note("bolt");
+  }
+
+  private startNova() {
+    const p = this.p, f = this.player;
+    const cost = this.skillCost(NOVA.cost);
+    if (p.spirit < cost || this.now < p.novaCdUntil || this.e.mode === "dead") return;
+    p.spirit -= cost;
+    p.novaCdUntil = this.now + NOVA.cdMs;
+    p.mode = "cast";
+    p.atk = null;
+    p.chain = 0;
+    p.def.guarding = false;
+    p.castKind = "nova";
+    p.castDone = false;
+    p.castReleaseAt = this.now + NOVA.releaseMs;
+    p.castUntil = this.now + NOVA.castMs;
+    p.invulnUntil = Math.max(p.invulnUntil, this.now + NOVA.iframesMs); // a burst out of trouble
+    f.play(HERO_CLIPS.guardUp);
+    f.startTrail(NOVA.releaseMs, 0xff8a3c, 45, 0.5, 320, true);
+    this.telemetry.record("skill", this.now);
+    this.sfx.skill();
+    this.note("skill", { id: "NOVA", spirit: p.spirit });
+  }
+
+  private releaseCast() {
+    const p = this.p;
+    p.castDone = true;
+    if (p.castKind === "bolt") this.spawnBolt();
+    else if (p.castKind === "nova") this.novaBlast();
+  }
+
+  private novaBlast() {
+    const f = this.player, en = this.enemy;
+    this.vfx.play(FX_EXTRA.burst2, f.x, f.y - 30, { scale: 3.6, depth: EMISSIVE_DEPTH });
+    this.vfx.play(FX_EXTRA.burst, f.x, f.y - 20, { scale: 2.0, add: true, alpha: 0.3, depth: EMISSIVE_DEPTH + 0.01 }); // the white flash frames need additive blending
+    this.sfx.whirl();
+    this.sfx.deathblow();
+    this.shake(0.01, 200);
+    this.hitstop = Math.max(this.hitstop, 90);
+    const cleared = this.projs.clearEnemy(f.x, f.y, NOVA.radius);
+    let hit = false;
+    if (this.e.mode !== "dead" && Math.abs(en.x - f.x) < NOVA.radius + en.radius && Math.abs(en.y - f.y) < NOVA.band) {
+      hit = true;
+      this.playerHitsEnemy({ id: "NOVA", clip: { sheet: "", from: 0, to: 0 }, hits: [], chainFrom: 99, lunge: 0 }, { a: 0, b: 0, dmg: NOVA.dmg, posture: NOVA.posture, reach: 0, kind: "heavy" }, 0);
+      this.e.dash += Math.sign(en.x - f.x || 1) * 46;
+      if (this.e.mode === "attack") {
+        // the blast interrupts whatever the boss was doing
+        this.e.mode = "idle";
+        this.e.atk = null;
+        this.e.gate = null;
+        this.e.feinting = false;
+        this.enemy.anim.speed = 1;
+        this.e.thinkAt = this.now + 450;
+      }
+    }
+    this.note("nova", { hit, cleared });
+  }
+
+  // ---- projectiles: collision against the fighters, reflection of a deflected enemy projectile
+  spawnProjectile(o: Parameters<ProjectileSystem["spawn"]>[0]) {
+    if (o.owner === "enemy") this.telemetry.attackStart(o.id, this.now);
+    return this.projs.spawn(o);
+  }
+
+  private updateProjectiles(dt: number) {
+    if (!this.projs.list.length) return;
+    this.projs.update(dt, FLOOR);
+    const pl = this.player, en = this.enemy;
+    for (const pr of [...this.projs.list]) {
+      if (pr.owner === "player") {
+        if (this.e.mode === "dead") continue;
+        const hitE = Math.abs(pr.x - en.x) < en.radius + pr.radius && Math.abs(pr.y - en.y) < (en.radius + pr.radius) * 0.75 && Math.abs(pr.z - (en.z + 25)) < 140;
+        if (!hitE) continue;
+        this.playerHitsEnemy({ id: pr.reflected ? "REFLECT" : pr.id, clip: { sheet: "", from: 0, to: 0 }, hits: [], chainFrom: 99, lunge: 0 }, { a: 0, b: 0, dmg: pr.dmg, posture: pr.posture, reach: 0, kind: pr.kind }, 0);
+        this.projs.destroy(pr, true);
+      } else {
+        if (this.now < pr.ignorePlayerUntil || this.p.mode === "dead") continue;
+        const hitP = Math.abs(pr.x - pl.x) < HERO.radius + pr.radius && Math.abs(pr.y - pl.y) < (HERO.radius + pr.radius) * 0.75 && Math.abs(pr.z - (pl.z + 25)) < 40;
+        if (!hitP) continue;
+        const hit: HitDef = { a: 0, b: 0, dmg: pr.dmg, posture: pr.posture, reach: 0, kind: pr.kind };
+        const pseudo: EnemyAttack = { id: pr.id, desc: "", clip: { sheet: "", from: 0, to: 0 }, hits: [hit], range: [0, 0], cooldownMs: 0, lunge: 0 };
+        this.lastEnemyOutcome = null;
+        this.enemyHits(pseudo, hit, 0, { inRange: true, srcX: pr.x, projectile: pr });
+        const out = this.lastEnemyOutcome;
+        if (out === "deflected") this.reflect(pr);
+        else if (out === "dodged") pr.ignorePlayerUntil = this.now + 500; // it slips past
+        else this.projs.destroy(pr, true);
+      }
+    }
+  }
+
+  /** A perfect parry sends an enemy projectile back, faster and harder. */
+  private reflect(pr: Projectile) {
+    pr.owner = "player";
+    pr.reflected = true;
+    pr.vx = -pr.vx * 1.3;
+    pr.vy = Phaser.Math.Clamp((this.enemy.y - pr.y) * 1.2, -140, 140);
+    pr.dmg = Math.round(pr.dmg * 1.6) + 4;
+    pr.posture = pr.posture * 1.5 + 10;
+    pr.life = 1600;
+    pr.z = 30;
+    pr.sprite.setFlipX(pr.vx < 0).setTint(0xffd23f);
+    this.popup(pr.x, pr.y - 70, "REFLECT", "#ffd23f");
+    this.sfx.deflect();
+  }
+
   private startSkill(id: string) {
     const p = this.p, sk = SKILLS[id];
-    const cost = this.perk("kindled") ? Math.max(1, sk.cost - 1) : sk.cost;
+    const cost = this.skillCost(sk.cost);
     if (p.spirit < cost || this.e.mode === "dead") return;
     p.spirit -= cost;
     this.telemetry.record("skill", this.now);
@@ -599,7 +759,7 @@ export class ArenaScene extends Phaser.Scene {
       else e.posture = Math.min(100, e.posture + JUMP_COUNTER.posture);
       this.enemy.ghost(0xffd23f, 0.5, 320, true);
     }
-    if (a.id === "FLAME") this.vfx.play(FX_EXTRA.burst, this.enemy.x, this.enemy.y - 20, { scale: 1.6, add: true });
+    if (a.id === "FLAME") this.vfx.play(FX_EXTRA.burst2, this.enemy.x, this.enemy.y - 30, { scale: 2.2, depth: EMISSIVE_DEPTH });
     this.note("playerHit", { id: a.id, hit: i, dmg, broken, riposte, chain: this.p.chain });
     if (broken) {
       e.posture = 0;
@@ -724,15 +884,17 @@ export class ArenaScene extends Phaser.Scene {
     return Phaser.Math.Clamp(gap, 0, px);
   }
 
-  private enemyHits(a: EnemyAttack, h: HitDef, i: number) {
+  private enemyHits(a: EnemyAttack, h: HitDef, i: number, opts?: { inRange: boolean; srcX: number; projectile?: Projectile }) {
     const f = this.enemy, p = this.p;
-    const inRange = inReach(f.x, f.y, f.face, this.player.x, this.player.y, h.reach, h.band ?? 38, HERO.radius, h.around);
-    if (a.clashable && inRange && p.mode === "attack" && p.atk && !p.recovering && this.playerInStrike()) return this.startClash(a, h, i);
+    const inRange = opts ? opts.inRange : inReach(f.x, f.y, f.face, this.player.x, this.player.y, h.reach, h.band ?? 38, HERO.radius, h.around);
+    if (!opts && a.clashable && inRange && p.mode === "attack" && p.atk && !p.recovering && this.playerInStrike()) return this.startClash(a, h, i);
     const countered = h.kind === "perilous" && this.now - p.counterAt <= HERO.counterMs;
     const out: Outcome = resolveEnemyHit(p.def, this.now, h, inRange, countered, (this.assist ? HERO.assistDeflectMs : HERO.deflectMs) + (this.perk("keen") ? 40 : 0), this.player.z >= HERO.leapZ);
     this.note("enemyHit", { id: a.id, hit: i, outcome: out, frame: f.anim.frame });
     this.telemetry.outcome(a.id, out);
-    const mid = { x: (this.player.x + f.x) / 2, y: this.player.y - 40 * SCALE * 0.6 };
+    this.lastEnemyOutcome = out;
+    const srcX = opts?.srcX ?? f.x;
+    const mid = { x: (this.player.x + srcX) / 2, y: this.player.y - 40 * SCALE * 0.6 };
     switch (out) {
       case "missed":
       case "dodged":
@@ -755,7 +917,8 @@ export class ArenaScene extends Phaser.Scene {
         this.telemetry.record("counter", this.now);
         break;
       case "deflected":
-        this.reverseEnemy(a, h, h.posture * 1.3 * (this.perk("wrist") ? 1.3 : 1));
+        if (opts?.projectile) this.p.riposteUntil = this.now + 800; // the projectile is sent back by the caller
+        else this.reverseEnemy(a, h, h.posture * 1.3 * (this.perk("wrist") ? 1.3 : 1));
         this.vfx.play(FX.sparkParry, mid.x, mid.y, { scale: 1.6, flip: f.face > 0 });
         this.vfx.play(FX.smear, mid.x, mid.y - 6, { scale: 1.4, flip: f.face < 0, tint: 0x8fd3ff, add: true });
         this.popup(this.player.x, this.player.y - 130, "PARRY", "#8fd3ff");
@@ -1410,6 +1573,20 @@ export class ArenaScene extends Phaser.Scene {
     ns(VIEW_W / 2, 60, 230, 24, 0.5, 0);                  // boss plate (screen 460 x 48)
     mk(this.add.image(VIEW_W / 2, 2, "ui_44").setOrigin(0.5, 0).setScale(1.7).setDepth(1991)); // parchment strip for the name
     this.pips = [];
+    // the skill bar: three fire skills beside the player plate (key, cost, icon)
+    const defs = [
+      { action: "skill" as const, base: 2, sheet: "fire_02_explosion_spritesheet", frame: 3 },
+      { action: "bolt" as const, base: BOLT.cost, sheet: "fire_spell_firebolt_spritesheet", frame: 1 },
+      { action: "nova" as const, base: NOVA.cost, sheet: "fire_02_explosion_2_spritesheet", frame: 8 },
+    ];
+    this.slots = defs.map((d, i) => {
+      const x = 328 + i * 58, y = VIEW_H - 84;
+      ns(x, y, 26, 26); // nine-slice panel (drawn at 2x)
+      const icon = mk(this.add.image(x + 26, y + 26, d.sheet, d.frame).setScale(1.15).setDepth(2001)) as Phaser.GameObjects.Image;
+      const key = mk(this.add.text(x + 5, y + 3, "", { fontFamily: "monospace", fontSize: "11px", color: "#ffe9b0", stroke: "#000", strokeThickness: 3 }).setDepth(2002)) as Phaser.GameObjects.Text;
+      const cost = mk(this.add.text(x + 47, y + 36, "", { fontFamily: "monospace", fontSize: "12px", color: "#8fd0ff", stroke: "#000", strokeThickness: 3 }).setOrigin(1, 0).setDepth(2002)) as Phaser.GameObjects.Text;
+      return { action: d.action, base: d.base, icon, key, cost };
+    });
     for (let i = 0; i < HERO.spirit; i++) this.pips.push(mk(this.add.image(36 + i * 28, VIEW_H - 51, "ui_37").setOrigin(0, 0).setScale(1.1).setDepth(2001)) as Phaser.GameObjects.Image);
   }
 
@@ -1433,6 +1610,17 @@ export class ArenaScene extends Phaser.Scene {
     bar(pbx, pby + 18, 264, 6, p.posture / HERO.posture, p.mode === "hurt" && p.posture >= 44 ? 0xff9f43 : 0xe3b341);
     bar(VIEW_W / 2 - 210, 74, 420, 12, hpE, 0xb02a37, tr.e);
     bar(VIEW_W / 2 - 210, 92, 420, 6, e.posture / ENEMY.posture, e.mode === "broken" ? 0xff5d5d : 0xe3b341);
+    // skill bar: dim what the spirit cannot pay for, show the bound key and the cost, sweep a cooldown over the icon
+    this.slots.forEach((sl, i) => {
+      const cost = this.skillCost(sl.base), ok = p.spirit >= cost;
+      sl.icon.setAlpha(ok ? 1 : 0.3);
+      sl.key.setText(this.inp.label(sl.action));
+      sl.cost.setText(String(cost)).setColor(ok ? "#8fd0ff" : "#8a8a8a");
+      const cdUntil = sl.action === "bolt" ? p.boltCdUntil : sl.action === "nova" ? p.novaCdUntil : 0;
+      const cdTotal = sl.action === "bolt" ? BOLT.cdMs : NOVA.cdMs;
+      const frac = Math.max(0, Math.min(1, (cdUntil - this.now) / cdTotal));
+      if (frac > 0) g.fillStyle(0x000000, 0.55).fillRect(328 + i * 58 + 4, VIEW_H - 84 + 4 + 44 * (1 - frac), 44, 44 * frac);
+    });
     // phase 2 notch on the boss bar
     g.fillStyle(0xf2e6c4, 0.9).fillRect(VIEW_W / 2 - 210 + 420 * this.boss.phase2.hpPct - 1, 72, 2, 16);
     // spirit: flame icons, faded until earned

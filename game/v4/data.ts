@@ -120,6 +120,34 @@ export const SKILLS: Record<string, PlayerAttack & { cost: number }> = {
   },
 };
 
+/** Ember Bolt (Q): a fireball thrown along the floor. Jump it? It is the player's, so it hits bosses; bosses' own projectiles fly at z 25 and a jump clears them. */
+export const BOLT = { cost: 1, cdMs: 420, castMs: 240, releaseMs: 150, speed: 560, dmg: 10, posture: 16, life: 1700, radius: 16, clip: { sheet: "fk_sp_atk", from: 1, to: 5, fps: 30 } as Clip };
+/** Inferno Ring (R): an explosion of fire around the knight. Short invulnerable burst, destroys enemy projectiles in the ring, knocks the boss and breaks guards. */
+export const NOVA = { cost: 3, cdMs: 1400, castMs: 520, releaseMs: 320, radius: 190, band: 120, dmg: 22, posture: 34, iframesMs: 460 };
+
+/** How each projectile looks: a looping frame range of a pimen sheet in flight, another range on impact. */
+export interface ProjLook {
+  sheet: string;
+  loop: [number, number];
+  impact: [number, number];
+  scale: number;
+  fps: number;
+  /** tint of the afterimage trail */
+  trail: number;
+  /** impact effect uses its own sheet (default: the same one) */
+  impactSheet?: string;
+  rotate?: boolean;
+  /** additive blending (energy); fire uses normal blending so it stays orange */
+  additive?: boolean;
+}
+/** Light-emitting effects (fire, projectiles) are drawn above the area's ambient colour layer so they are not tinted by it. */
+export const EMISSIVE_DEPTH = 1905;
+export const PROJ_LOOKS: Record<string, ProjLook> = {
+  ember: { sheet: "fire_spell_firebolt_spritesheet", loop: [0, 3], impact: [4, 9], scale: 1.7, fps: 20, trail: 0xff9a3c },
+  orb: { sheet: "magical_animations_energyball", loop: [0, 8], impact: [0, 6], impactSheet: "magical_animations_energyballimpact", scale: 0.55, fps: 18, trail: 0x6fa8ff, additive: true },
+  spike: { sheet: "magical_animations_energyball", loop: [0, 8], impact: [0, 6], impactSheet: "magical_animations_energyballimpact", scale: 0.4, fps: 22, trail: 0xc7d2e0, additive: true },
+};
+
 /** Deathblow quick-time event: prompts the player must hit as the ring closes. */
 export const DEATHBLOW = {
   prompts: 3,
@@ -186,6 +214,7 @@ export const GATE_WAIT = 450; // how long a poised attack waits for the branch a
 
 export const FX_EXTRA = {
   burst: "fire_02_explosion_2_spritesheet",
+  burst2: "fire_02_explosion_spritesheet",
   fireBolt: "fire_spell_firebolt_spritesheet",
   hitFire: "fire_spell_fire_breath_hit_effect_spritesheet",
   smokeA: "smoke_n_dust_03_smokendust_p03_vfx_2",
