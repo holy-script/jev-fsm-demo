@@ -23,6 +23,7 @@ import type { ArenaManifest } from "./manifest";
 import { Vfx } from "./vfx";
 import { AudioManager } from "./audio";
 import { CameraEffects } from "./camera";
+import { WeatherEmitter } from "./particles";
 
 /** Phase 1 test arena: Fire Knight against a Metal Bladekeeper training enemy on a flat floor. The point is the kernel (combat model,
  *  combo chain, reverse perfect parry, animator), not the content; phases 3 to 5 replace the enemy, map and HUD. Controls:
@@ -88,6 +89,7 @@ export class ArenaScene extends Phaser.Scene {
   sfx!: Sfx;
   music!: AudioManager;
   camera!: CameraEffects;
+  weather?: WeatherEmitter;
   /** menu: title backdrop (no input, AI idle, HUD hidden); play: the fight */
   mode: "menu" | "play" = "play";
   run: RunSave | null = null;
@@ -245,12 +247,14 @@ export class ArenaScene extends Phaser.Scene {
     this.area?.update(raw);
     this.updateQte(raw);
     this.updateVignette();
+    this.weather?.update(this.now);
     this.camera.update(this.now);
     if (!this.distHist.length || this.now - this.distHist[this.distHist.length - 1].t >= 100) {
       this.distHist.push({ t: this.now, d: Math.abs(this.enemy.x - this.player.x) });
       while (this.distHist.length && this.now - this.distHist[0].t > 1200) this.distHist.shift();
     }
     this.drawHud();
+    this.drawWeather();
   }
 
   private dirInput() {
@@ -1086,10 +1090,17 @@ export class ArenaScene extends Phaser.Scene {
 
   private buildArea() {
     this.area?.destroy();
+    this.weather?.clear();
     const def = AREAS[this.boss.area];
     this.area = new AreaView(this, def);
     if (this.sfx && this.manifest.music) this.sfx.playMusic(def.music, 0.25);
     this.note("area", { id: def.id });
+    // Setup weather based on area atmosphere
+    if (def.atmosphere?.rain) {
+      this.weather = new WeatherEmitter(this, "rain", 0, 0, VIEW_W, VIEW_H);
+    } else {
+      this.weather = undefined;
+    }
     if (this.mode === "menu" || (this.dev && new URLSearchParams(window.location.search).has("nocard"))) return;
     const t1 = this.add.text(VIEW_W / 2, 230, def.name, { fontFamily: "monospace", fontSize: "34px", color: "#f5e6c8", stroke: "#000", strokeThickness: 5 }).setOrigin(0.5).setDepth(2500).setAlpha(0);
     const t2 = this.add.text(VIEW_W / 2, 270, def.subtitle, { fontFamily: "monospace", fontSize: "14px", color: "#cdbf9f", stroke: "#000", strokeThickness: 3 }).setOrigin(0.5).setDepth(2500).setAlpha(0);
@@ -1769,5 +1780,15 @@ export class ArenaScene extends Phaser.Scene {
     this.texts.help.setAlpha(Phaser.Math.Clamp(1 - (this.now - 9000) / 3000, 0, 1) * (this.mode === "play" ? 1 : 0));
     this.texts.combo.setText(p.chain > 1 ? `x${p.chain}` : "");
     if (this.dev) this.texts.debug.setText(`p:${p.mode} chain:${p.chain} hp:${Math.round(p.hp)} post:${Math.round(p.posture)} | e:${e.mode} hp:${e.hp} post:${Math.round(e.posture)} ai:${e.auto} | ${this.player.anim.sheet}#${this.player.anim.frame}`);
+  }
+
+  private drawWeather() {
+    if (!this.weather) return;
+    const g = this.add.graphics().setDepth(500); // behind HUD but in front of gameplay
+    for (const p of this.weather.getParticles()) {
+      g.fillStyle(p.color, p.getAlpha());
+      g.fillCircle(p.x, p.y, p.scale * 2);
+    }
+    g.destroy();
   }
 }
