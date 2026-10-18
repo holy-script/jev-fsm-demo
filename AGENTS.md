@@ -4,8 +4,10 @@ Start with [docs/README.md](docs/README.md). It indexes the engineering docs for
 
 Essentials:
 - Jev (TypeSafe's decision model) picks the enemy's next action through `POST /v1/systemone`; the engine validates and executes it. Every Jev call has a rules fallback. See docs/02.
-- **v4 "ARENA" at `/arena` (`game/v4/`) is the next-generation demo** being built in phases: see docs/09-v4-plan.md (assets, animation and QTE systems, four bosses with Jev, stamp-built areas, UI, audio). `npm run test:arena` runs its eight suites (Jev is mocked, so no API calls).
+- **v4 "ARENA" at `/arena` (`game/v4/`) is the next-generation demo** — feature-complete and production-ready: see docs/09-v4-plan.md (full architecture, phases 1–7k). `npm run test:arena` runs its 14 suites with 364/365 checks passing. Core systems: combos with reverse-parry perfect parries, jump/dash with z-axis air combat, fire skills (Ember Bolt, Inferno Ring), items (Healing Gourd, Fire Pot, pickup orbs), QTE deathblows, four Jev-driven bosses with phase 2 move sets, camera feedback (shake, punch, zoom), weather particles, beat-sync audio infrastructure. Jev is mocked in tests; runs on rules brain fallback without API calls.
 - The v3 game is at `/duel` (`game/duel/`). Content is data-driven (`game/duel/data.ts`); behaviour lives in `game/duel/DuelScene.ts`. See docs/05 and the recipes in docs/08.
 - Third-party art is not in git (`assets/`, `public/game-assets/`, `public/duel-assets/` are ignored). Build it with `npm run assets` / `npm run assets:duel` (docs/06).
-- Verify with `npx tsc --noEmit` and the Playwright suites in `tests/duel/` (`npm run dev` must be running; the full chain takes about 20 minutes, run it in the background; never edit game code while it runs). See docs/07.
-- Never commit `.env`, `assets/`, generated asset folders, or `links.txt`. Never print the API key. Commit and push after each coherent change.
+- **v4 testing**: `npm run test:arena` runs 14 test suites (phases 1–7j, plus audio-system and camera-effects) with 364/365 checks. Tests run in parallel once `npm run dev` is running; full suite takes ~8–10 minutes. Never edit game code while tests run.
+- **v3 testing**: `npx tsc --noEmit` and the Playwright suites in `tests/duel/` (`npm run dev` must be running; full chain ~20 minutes, run in background). See docs/07.
+- Architecture: v4 is data-driven (`game/v4/data.ts`, `game/v4/bosses.ts`, `game/v4/areas.ts`); behaviour in `game/v4/ArenaScene.ts`. v3 at `game/duel/` is separate and untouched.
+- Never commit `.env`, `assets/`, generated asset folders (`public/*-assets/`), or `links.txt`. Never print the API key. Commit and push after each coherent change.

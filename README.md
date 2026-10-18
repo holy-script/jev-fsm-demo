@@ -4,6 +4,7 @@
 
 Jev (TypeSafe's decision model) picks the next state of an enemy finite state machine; you try to beat it. Next.js + Phaser.
 
+- **`/arena`** - **v4 ARENA** (current): side-view 1v1 arena with four Jev-driven bosses. Full combat system: combos with reverse-parry, jump/dash with air combat, fire skills (Ember Bolt, Inferno Ring), items (Healing Gourd, Fire Pot), QTE deathblows, and Jev AI. Runs in real-time with camera feedback (shake, punch, zoom), weather effects, pickup orbs, and beat-sync infrastructure. Play at `/arena?dev=1`. See [docs/09-v4-plan.md](docs/09-v4-plan.md) for full architecture and phase breakdown.
 - `/boss-rush` - side-view hack & slash, four bosses (Slime, Fire Worm, Evil Wizard, Bringer of Death), Tiled arenas. Needs assets: see [tools/README.md](tools/README.md).
 - `/duel` - Sekiro-style posture duel on a large top-down map (deflect, posture bars, deathblows, perilous attacks). A full game: tutorial, skill shrine, three areas and a final boss (Bone Soldier, Spear Bearer, Skeleton Captain, Mecha-Stone Golem, Bringer of Death), with Jev choosing the boss's moves, combo branches, rhythm and taunts. Assets: see [tools/README.md](tools/README.md).
 - `/basic` - v1, a top-down shooter duel with procedural art. Also kept on the `v1-basic` branch.
@@ -65,3 +66,44 @@ A new game starts in the monastery courtyard with an **Instructor** (a pale spir
 ### Encounters
 
 The real game plays: the tutorial (Sparring Shade), the **Bone Soldier** and the **Spear Bearer** (rules-driven skeleton grunts: no Jev calls, no shrine, no skill points; the spear's long thrust is red and perilous), then the **Skeleton Captain** and the **Mecha-Stone Golem** (both driven by Jev, each followed by the shrine). `node tests/duel/grunts.mjs` covers the grunt flow.
+
+## Credits
+
+### v4 ARENA Assets
+
+**Characters & Animation** — [chierit](https://chierit.itch.io/) (CC BY 4.0)
+- Fire Knight (player), Metal Bladekeeper, Crystal Mauler, Wind Hashashin, and companion characters
+- All animation assets include idle, run, attack chains, special moves, and hit reactions
+
+**Visual Effects** — [pimen](https://pimen.itch.io/) (CC attribution)
+- Fire, water, ice, thunder, earth, wind, holy and dark element effect packs
+- Hit sparks, slashes, thrusts, smoke, healing auras
+- 24 free VFX packs used for projectiles and skill feedback
+
+**Environments & Tilesets** — [immunitys](https://immunitys.itch.io/) (free, no redistribution)
+- Forgotten Memories 32x32 (forest, river, cliffs, waterfall, bridges)
+- Resurrected RPG forest tileset (grass, trees, plants)
+- Pixel RPG UI Pack (frames, parchment style)
+- RPG Icon Packs 24x32 (items, UI elements)
+
+**Music Infrastructure** — Ready for beat-sync integration with tracks from:
+- [alkakrab](https://alkakrab.itch.io/) — Fantasy RPG Soundtrack, 12-Track Pixel RPG Music
+- [davidkbd](https://davidkbd.itch.io/) — Eternity Metal/Sci-Fi Music Pack
+
+### v3 Duel Assets (v2 game)
+
+- Sword clash and swing sounds (CC0)
+- v-ktor hit sparks (CC BY)
+- Pimen smoke and heal effects
+- Ninja Adventure music (beat-analysed)
+
+### Build & Development
+
+- **Engine**: Phaser 3.80 (open-source 2D framework)
+- **Frontend**: Next.js 15, React 19
+- **Testing**: Playwright (end-to-end browser automation)
+- **AI**: TypeSafe Jev (decision model integration)
+
+---
+
+All art, code, and assets respect their respective licenses. The demo runs entirely client-side; no asset redistribution occurs.
