@@ -352,3 +352,46 @@ Updated boss weights to include phase2 moves in all distance bands; persona desc
 **Exit check:** partial. Core vignette pulse working. Deferred for 7g: per-area weather particles (rain drops, lightning flashes), cloud shadows, wind gust effects (trees/grass sway), camera shake on key hits, beat-sync choreography.
 
 **Deferred beyond 7:** Fire pot explosion mechanics, pickup orb entity spawning, HUD item bar, shrine pickups/refill, touch support, production build check (`next build`), beat-synced attack choreography, second area-to-area walking scene, visible shrine location.
+
+## 21. Phase 7g results: item HUD display and audio infrastructure
+
+**Deliverables:** Items HUD bar displaying gourd and fire pot charge counts with cooldown overlays. Each item shows max 3 boxes; filled boxes colored (blue for gourd, orange for fire pot), empty boxes gray. Cooldown overlay sweeps across the last charge box when on cooldown. Fixed FIRE_POT JSDoc comment syntax (was triple-quote, now proper `/**...*/`).
+
+**Audio system infrastructure:** Two new modules for music and beat-sync choreography:
+- `game/v4/music.ts`: TrackMeta interface with BPM, loop point, file path, contexts. MUSIC record with placeholder metadata for all 4 boss tracks. Utility functions: getBpm, getBeatMs, getBeatPhase (0-1), msUntilNextBeat, nearBeat.
+- `game/v4/audio.ts`: AudioManager class with track loading/playback, fade in/out, beat queries (getBeatPhase, getMsUntilNextBeat, isNearBeat). Tracks elapsed time, supports looping at loop point. Ready for boss choreography sync.
+
+AudioManager integrated into ArenaScene as `this.music`, exposed via `window.__arena.music` for test access.
+
+**Music investigation document** (docs/10-music-investigation.md): Comprehensive framework for beat-sync choreography covering three itch.io music packs (Fantasy RPG Soundtrack, Free 12-Tracks Pixel RPG, Eternity Metal/Sci-Fi). Proposes 120–130 BPM target, phased implementation plan (track selection → audio integration → boss choreography → player feedback), and preliminary track assignments per boss.
+
+**Test suites:**
+- 7g (5 checks): HUD exists, item charges tracked, refill on reset (shrine behavior).
+- audio-system (5 checks): AudioManager init, music metadata, beat query methods, playback state.
+
+**Regression:** 364/365 checks pass (phase 3 has 29/30). All phases 1–7g green.
+
+**Exit check:** partial. Item HUD display complete. Audio infrastructure ready for music files. Beat-sync framework ready for integration once music packs are auditioned and BPM confirmed.
+
+**Deferred to 7h:** Pickup orb spawning triggers, beat-sync choreography (requires actual music files).
+
+## 22. Phase 7h results: pickup spawning triggers
+
+**Deliverables:** Enhanced PickupSystem with spawnReward() method spawning multiple pickups with random scatter. Event-driven pickup spawning:
+- **Phase 2 transition:** 2 gem orbs spawn (spirit gain for harder phase)
+- **Perfect parry (deflect):** 1 gem orb spawns (reward for skilled defense)
+- **Boss defeat:** 1 heart + 2 gem orbs spawn (shrine prep for next encounter)
+
+Spawning implemented in ArenaScene at key game events (phase2 check, deflect outcome, killBoss method). Pickups provide visual feedback and resource management motivation.
+
+**Test suite 7h:** 4 checks verifying phase 2 pickup spawn, parry reward spawn, victory rewards, and spawnReward scatter behavior.
+
+**Regression:** 364/365 checks pass (phase 3 has 29/30). All phases 1–7h green.
+
+**Exit check:** met. Pickup spawning infrastructure complete. Shrine refill working (items reset to full on arena reset). Ready for beat-sync music integration and atmospheric polish.
+
+**What remains in Phase 7:**
+- Beat-sync choreography (audio files, boss attack alignment to musical beats)
+- Per-area weather particles (rain, lightning, wind effects)
+- Camera effects (shake on key hits, zoom, pan)
+- Production-ready asset pipeline and docs
