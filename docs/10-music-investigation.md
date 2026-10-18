@@ -1,127 +1,252 @@
-# Music Investigation for Beat-Sync Choreography
+# Music Integration Investigation & Audition Guide
 
-## Objective
-Evaluate free music packs from itch.io for integration into v4 ARENA boss fights. The goal is to enable beat-synchronous choreography where boss attacks align with musical beats for improved flow and player engagement.
+**Phase**: v4 ARENA Music Integration (Phase 7l)  
+**Status**: Audition planning + track selection  
+**Estimated Time**: 3–4 hours (audition, select, integrate, test)
 
-## Music Packs Investigated
+---
 
-### 1. Fantasy RPG Soundtrack Music (alkakrab)
-**URL:** https://alkakrab.itch.io/fantasy-rpg-soundtrack-music  
-**Status:** Free, highly rated (4.9★)  
-**Typical content:**
-- Ambient exploration tracks (slower tempos, 90-110 BPM)
-- Boss battle themes (energetic, 120-140 BPM)
-- Victory/defeat themes
-- Looping format suitable for gameplay
+## Target Packs & Sourcing
 
-**Assessment for Beat-Sync:**
-- ✓ Likely includes looping versions
-- ✓ Multiple boss themes (one per region/boss)
-- ? BPM typically in game-friendly ranges (120-140 fits standard 2x projectile speed)
-- ? Holds/accents that sync with attack phases
+### Pack 1: Fantasy RPG Soundtrack by alkakrab
+**URL**: https://alkakrab.itch.io/  
+**License**: Free, credit appreciated  
+**Style**: Fantasy RPG ambient/exploration + action tracks  
+**Format**: MP3, WAV, Ogg (236 MB zip)  
+**Characteristics**: Pixel-style, original human-made compositions  
+**Best for**: Bladekeeper (crafted, strategic), Mauler (heavy defense)  
+**Notes**: Highly rated (5.0 from 32+ ratings), widely used in game jams
 
-### 2. Free 12 Tracks - Pixel RPG Game Music Pack (alkakrab)
-**URL:** https://alkakrab.itch.io/free-12-tracks-pixel-rpg-game-music-pack  
-**Status:** Free, curated 12-track set  
-**Typical content:**
-- Pixel-art style music (8-bit/16-bit inspired)
-- 12 discrete tracks = ~1 per area/boss
-- Mix of exploration, combat, boss, and ambient
-- Shorter lengths (2-3 min typical) = suitable for repeating sections
+### Pack 2: 12-Track Pixel RPG Music Pack by alkakrab
+**URL**: https://alkakrab.itch.io/free-12-tracks-pixel-rpg-game-music-pack  
+**License**: Free for commercial use, credit not required  
+**Style**: Pixel RPG action + exploration (12 distinct tracks)  
+**Format**: MP3, WAV, Ogg (236 MB zip)  
+**Characteristics**: Original compositions, no AI, consistent pixel aesthetic  
+**Best for**: Hashashin (wind, swift), Echo (mirror/reflection)  
+**Notes**: Extremely popular (5.0 from 35+ ratings), used in Brackeys Game Jam
 
-**Assessment for Beat-Sync:**
-- ✓ Exactly one track per v4 boss (Bladekeeper, Mauler, Hashashin, Echo)
-- ✓ Pixel art aesthetic matches visual direction
-- ✓ Predictable track lengths for choreography planning
-- ? Less variety within a track (fixed loop vs. multi-section)
+### Pack 3: Eternity Metal/Sci-Fi Music Pack by davidkbd
+**URL**: https://davidkbd.itch.io/eternity-metal-scfi-music-pack  
+**License**: CC BY 4.0 (requires attribution)  
+**Style**: Djent/metal-inspired action music (Doom Eternal vibe)  
+**Format**: MP3, WAV (12 tracks + looping + one-shot versions)  
+**Price**: Pay-what-you-want ($6.00 suggested)  
+**Characteristics**: High-energy, cinematic metal, CC 4.0 licensed  
+**Best for**: High-intensity boss phases, deathblow moments  
+**Notes**: 5.0 rating from 30+ ratings, Celldweller/Tesseract inspired
 
-### 3. Eternity: Metal/Sci-Fi Music Pack (davidkbd)
-**URL:** https://davidkbd.itch.io/eternity-metal-scfi-music-pack  
-**Status:** Free, electronic/metal style  
-**Typical content:**
-- High-energy electronic/metal hybrid
-- Synth-heavy, heavy percussion
-- Sci-fi or cosmic aesthetic
-- Loop and non-loop variants
+---
 
-**Assessment for Beat-Sync:**
-- ? High energy may suit Echo (glitchy, technical)
-- ? Not as well-suited to medieval aesthetic (Bladekeeper, Hashashin)
-- ✓ Strong percussion makes beat-sync straightforward
-- ? May conflict with Fire Knight thematic
+## Audition Workflow
 
-## Beat-Sync Choreography Framework
+### Step 1: Download & Organize
+```bash
+# Create music workspace
+mkdir -p /tmp/music-audit/{fantasy1,fantasy2,eternity}
 
-### BPM and Boss Attack Timing
-- **120 BPM:** 500ms per beat (good for average swing timing)
-- **140 BPM:** ~430ms per beat (faster, twitchier feel)
-- **100 BPM:** 600ms per beat (slower, deliberate)
+# Download and extract packs:
+# 1. Fantasy RPG Soundtrack → fantasy1/
+# 2. 12-Track Pixel RPG → fantasy2/
+# 3. Eternity Metal Pack → eternity/
 
-Current boss hold times (gamedata):
-- Standard attack: 800-1000ms wind-up
-- Heavy attack: 1200-1600ms wind-up
-- Perilous: 800-1200ms with hold animation
+# Organize by type:
+# - fantasy1/action/ (combat tracks)
+# - fantasy1/ambient/ (exploration tracks)
+# - fantasy2/tracks/ (all 12 distinct tracks)
+# - eternity/action/ (high-energy tracks)
+# - eternity/ambient/ (tension/boss entrance tracks)
+```
 
-**Recommendation:** Target 120-130 BPM for primary boss tracks. Wind-ups should:
-1. Begin just before a beat (player gets visual telegraph)
-2. Resolve at a beat (strike synchronized)
-3. Hold/recovery aligns with beat boundaries for combo windows
+### Step 2: BPM Detection & Metadata Extraction
+For each candidate track:
+1. **Identify BPM**: Use Audacity or online BPM analyzer (e.g., moises.ai, dbx.app)
+2. **Measure Loop Point**: Find where the track naturally loops (end-to-beginning seamless)
+3. **Duration**: Total track length (in ms)
+4. **Character**: Describe mood/intensity/instrumentation
+5. **Boss Fit**: Evaluate match for each boss personality
 
-### Implementation Plan
+**Target BPM Range**: 110–140 BPM (matches prior Duel game choreography baseline of 90–140)
 
-#### Phase 1: Track Selection & Metadata
-1. Download all three packs
-2. Catalog each track: name, BPM, length, loop type, peak intensity
-3. Assign tracks to bosses based on:
-   - Thematic fit (medieval vs sci-fi)
-   - Energy level (calm exploration, combat, boss battle)
-   - BPM compatibility (120-140 preferred)
-4. Create `game/v4/music.ts` with track metadata
+---
 
-#### Phase 2: Audio Integration
-1. Add tracks to `public/game-assets/music/`
-2. Implement `AudioManager` class:
-   - Load/unload tracks by context (area, boss)
-   - Loop playback with fade in/out
-   - Track current beat position for sync queries
-3. Expose beat time to `ArenaScene` via `this.music.beatTimeMs()`
+## Boss-Specific Track Selection Criteria
 
-#### Phase 3: Boss Choreography Sync
-1. Update `bosses.ts` attack data:
-   - Add optional `beatSync?: number` (offset in beats from music start)
-   - Modify boss AI to queue attacks on beat boundaries
-2. Integrate into Jev snapshot: include `currentBeat` so Jev can recommend beat-aligned attacks
-3. Add visual cue (faint metronome overlay, optional) during boss wind-up
+### Bladekeeper (Metal Bladekeeper)
+- **Personality**: Crafted, blade-focused, measured combos, predictable patterns
+- **BPM Target**: 120–130 (moderate, focused)
+- **Characteristics**: Clean, sword-centric instrumentation, steady rhythm
+- **Desired Feel**: Duel-like, fencer's dance, deliberate
+- **Candidates to Prioritize**:
+  - [ ] Fantasy RPG "Blade/Combat" or "Duel" theme
+  - [ ] Pixel RPG "Combat 1" or "Boss Theme"
+  - [ ] Eternity "Action 1" (if melodic enough)
 
-#### Phase 4: Player Feedback Loop
-- Test sync feel with balance bot
-- Adjust hold times and beat alignment based on feel
-- May require phase2 speed multiplier adjustment (currently 1.15-1.25x)
+### Mauler (Crystal Mauler)
+- **Personality**: Heavy, defensive, tanking, phase-2 aggressive rush
+- **BPM Target**: 100–120 (heavier, slower, more powerful)
+- **Characteristics**: Heavy orchestration, defensive stance vibes, crushing beats
+- **Desired Feel**: Siege-like, monolithic, overpowering
+- **Candidates to Prioritize**:
+  - [ ] Fantasy RPG "Heavy Boss" or "Fortress" theme
+  - [ ] Eternity "Heavy Metal" or "Ambient Action"
+  - [ ] Pixel RPG "Heavy" or "Boss Phase 2"
 
-## Track Assignment (Proposed)
+### Hashashin (Wind Hashashin)
+- **Personality**: Swift, wind-based, high-mobility, spins/rushes, dances
+- **BPM Target**: 130–140 (faster, dancer-like, energetic)
+- **Characteristics**: Percussive, rhythmic, wind/air elements, nimble
+- **Desired Feel**: Chase sequence, acrobatic, unpredictable tempo
+- **Candidates to Prioritize**:
+  - [ ] Fantasy RPG "Wind" or "Swift" theme
+  - [ ] Pixel RPG "Chase" or "Quick Combat"
+  - [ ] Eternity "Fast Action" or "Percussion-heavy"
 
-| Boss | Pack | Track | Style | BPM | Notes |
-|------|------|-------|-------|-----|-------|
-| Bladekeeper (MB) | RPG Fantasy | Knight's Duel | Medieval, measured | 120 | Steady, swashbuckling feel |
-| Mauler (CM) | RPG Fantasy | Siege | Dark, heavy | 110 | Slow, crushing power |
-| Hashashin (WH) | 12-Track Pixel | Desert Battle | Exotic, quick | 130 | Agile, unpredictable |
-| Echo (Echo) | Eternity/Metal | Synthetic | Electronic, glitchy | 140 | Chaotic, mirror-theme fits |
+### Echo (Mirror)
+- **Personality**: Reflective, adaptable, learns player's style, phase-2 chaotic/glitchy
+- **BPM Target**: 120–135 (versatile, can shift, evolving energy)
+- **Characteristics**: Evolving, mirroring energy, build/release arcs, phase-2 distortion
+- **Desired Feel**: Cinematic, learning/adaptation theme, final-boss epic
+- **Candidates to Prioritize**:
+  - [ ] Fantasy RPG "Adaptive" or "Rising Action" theme
+  - [ ] Eternity "Cinematic" or "Evolving" theme
+  - [ ] Pixel RPG "Final Boss" or "Epic" theme
 
-*Exact tracks to be confirmed after pack download and audition*
+---
 
-## Remaining Questions
+## Track Selection & Metadata Template
 
-1. **Loop structure:** Do packs include separate loop/intro/outro files, or single looping files?
-2. **Transition zones:** Are there natural break points for phase 2 musical shifts?
-3. **Licensing:** Confirm CCO or CC-BY attribution (both appear free, but verify)
-4. **Audio format:** Prefer OGG Vorbis for web (smaller than MP3, better compression). Check what formats are included.
+Once auditioned, document each selected track:
 
-## Next Steps
+```
+Boss: [Name]
+Track Title: [Official Name]
+Artist: [alkakrab | davidkbd]
+Pack: [Fantasy 1 | Pixel 12 | Eternity]
+BPM: [Integer, e.g., 120]
+Loop Point (ms): [When track repeats seamlessly, e.g., 8000]
+Total Length (ms): [e.g., 16000]
+Intensity (1-10): [Low: ambient/intro | High: full-energy boss]
+Character: [Brief description: e.g., "Clean sword clashes, focused energy"]
+License: [Free | CC BY 4.0]
+Attribution Required: [Yes | No]
+Audio Format: [MP3 | WAV | OGG]
+Notes: [Any caveats, phase-2 suitability, loops per fight, etc.]
+```
 
-1. Download and audit all three packs
-2. Extract BPM, length, format info for each track
-3. Select 4-5 best tracks matching boss themes
-4. Create music.ts metadata file
-5. Implement AudioManager for beat-sync queries
-6. Test sync feel in balance bot runs
-7. Integrate with boss phase2 transitions
+---
+
+## Integration Checklist (After Track Selection)
+
+- [ ] **1. Move tracks to `public/music/`**
+  - Copy selected MP3/WAV files to `public/music/boss-{name}.mp3`
+  - Verify all file paths match `game/v4/music.ts` entries
+
+- [ ] **2. Update `game/v4/music.ts`**
+  - Replace placeholder MUSIC record with real data
+  - Set BPM, loop point, length for each boss track
+  - Confirm all file paths resolve
+
+- [ ] **3. Wire AudioManager Playback**
+  - Call `AudioManager.play(trackId)` on boss enter (in ArenaScene.startBoss ~line 1000)
+  - Test track loops correctly at loop-point boundary
+  - Verify fade-in (500ms) and fade-out (500ms) on boss defeat
+  - Check music volume doesn't drown combat SFX
+
+- [ ] **4. Test Beat-Sync Queries**
+  - Open dev console, call `audioManager.getBeatPhase()`
+  - Verify BPM calculations are correct (beat duration = 60000 / BPM ms)
+  - Test `isNearBeat()` for attack alignment (optional)
+  - Confirm loop repeats seamlessly
+
+- [ ] **5. Credits Update**
+  - Add track titles and artists to README.md Credits section
+  - Ensure CC BY 4.0 attribution visible (for davidkbd tracks)
+  - Format: `"[Track Title]" by [Artist] from [Pack Name]`
+
+---
+
+## File Integration Points
+
+### game/v4/music.ts
+Current placeholder structure:
+```typescript
+export const MUSIC: Record<string, TrackMeta> = {
+  bladekeeper: {
+    bpm: 120,
+    length: 16000,
+    loopPoint: 8000,
+    path: '/music/boss-bladekeeper.mp3',
+    contexts: ['boss-bladekeeper'],
+  },
+  // ... mauler, hashashin, echo
+};
+```
+
+Will be updated with real data after audition.
+
+### game/v4/ArenaScene.ts
+Integration point (around line 1000 in startBoss):
+```typescript
+if (this.audioManager) {
+  const trackId = def.name.toLowerCase() // e.g., 'bladekeeper'
+  this.audioManager.play(trackId)
+}
+```
+
+### README.md Credits
+Will add under v4 ARENA section:
+```markdown
+**Music Tracks (Boss Fights)**
+- Bladekeeper: "[Track Title]" by alkakrab ([Pack Name])
+- Mauler: "[Track Title]" by alkakrab ([Pack Name])
+- Hashashin: "[Track Title]" by alkakrab ([Pack Name])
+- Echo: "[Track Title]" by [Artist] ([Pack Name]) [CC BY 4.0]
+```
+
+---
+
+## Decision Criteria for Track Selection
+
+1. **BPM Appropriateness**: Matches boss personality
+2. **Loop Seamlessness**: No click/gap at loop boundary
+3. **Duration**: Reasonable fight length (8–16 second loop, 30–60s total)
+4. **Instrumentation**: Clearly distinguishable from other bosses
+5. **Intensity Curve**: Handles phase 2 escalation well
+6. **Mixing**: Clear levels, no distortion
+7. **Attribution**: License respected
+
+---
+
+## Timeline
+
+- **Hour 1**: Download, extract, organize all packs (three folders, 20+ tracks to sort)
+- **Hour 1**: Analyze BPM, loop points, duration for 15–20 candidates
+- **Hour 1**: Audition rankings per boss, narrow to 4 final selections
+- **Hour 1**: Move files to `public/music/`, update metadata, test, commit
+
+**Total**: 3–4 hours (or compress to 2–2.5 with parallel listening)
+
+---
+
+## Resources & Tools
+
+**BPM Detection**:
+- [Audacity](https://www.audacityteam.org/) (free, desktop) - manual BPM tapping
+- [moises.ai](https://moises.ai/) (free, web) - AI-powered BPM detection
+- [dbx.app](https://www.dbx.app/) (free, web) - instant BPM analysis
+- Adobe Audition (paid) - professional tempo analysis
+
+**Loop Point Identification**:
+- Audacity waveform view (visual + audio verification)
+- VLC media player (loop/repeat settings to verify seamlessness)
+
+**Audio Testing**:
+- Chrome DevTools (muted audio, volume inspector)
+- Phaser 3 Audio API documentation (play, stop, fade)
+
+---
+
+**Current Status**: Pack research complete, ready for audition  
+**Next Action**: Download and organize packs, begin BPM analysis  
+**Estimated Completion**: 3–4 hours hands-on work this session
