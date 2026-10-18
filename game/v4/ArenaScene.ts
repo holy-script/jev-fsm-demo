@@ -322,7 +322,7 @@ export class ArenaScene extends Phaser.Scene {
     }
     const guardHeld = this.frame.guardHeld;
     const rollT = this.now - p.rollStart;
-    p.def.invulnerable = this.now < p.invulnUntil;
+    p.def.invulnerable = this.now < p.invulnUntil && p.mode === "hurt";
     p.def.rolling = (p.mode === "roll" && rollT >= HERO.rollIFrames[0] && rollT <= HERO.rollIFrames[1]) || (p.mode === "dash" && this.now - p.dashStart <= HERO.dashIFramesMs);
     if (this.e.mode !== "dead" && p.mode !== "dead") f.face = this.enemy.x >= f.x ? 1 : -1;
     if (this.now - p.lastHitAt > HERO.postureRegenDelayMs && p.mode !== "hurt") p.posture = Math.max(0, p.posture - (HERO.postureRegen * (this.perk("breath") ? 1.5 : 1) * (p.def.guarding ? 0.5 : 1) * dt) / 1000);
@@ -405,10 +405,7 @@ export class ArenaScene extends Phaser.Scene {
         break;
       }
       case "hurt": {
-        if (this.now >= p.hurtUntil) {
-          p.mode = "free";
-          p.invulnUntil = 0;
-        }
+        if (this.now >= p.hurtUntil) p.mode = "free";
         break;
       }
       case "air": {
