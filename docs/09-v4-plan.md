@@ -390,8 +390,32 @@ Spawning implemented in ArenaScene at key game events (phase2 check, deflect out
 
 **Exit check:** met. Pickup spawning infrastructure complete. Shrine refill working (items reset to full on arena reset). Ready for beat-sync music integration and atmospheric polish.
 
+## 23. Phase 7i results: camera effects (shake, punch) for combat feedback
+
+**Deliverables:** CameraEffects class in `game/v4/camera.ts` with:
+- Screen shake: rapid vibration with configurable intensity and frequency
+- Screen punch: directional camera movement for knockback feel
+- Both with duration and easing (fade-out, linear respectively)
+- Separate sine/cosine phases for X/Y axes for natural feel
+
+Integrated into ArenaScene:
+- `parryShake()` on perfect parry/deflect (5px, 120ms, higher frequency)
+- `hitShake()` on normal hits and blocks (3px, 80ms)
+- Full shake on deathblow (8px, 200ms)
+- Updates every frame with proper easing
+
+Camera feedback provides:
+- Player skill reward (parry feedback is distinctive)
+- Danger indication (hit shakes alert player)
+- Finishing blow satisfaction (deathblow shake)
+
+**Test suite 7i:** 6 checks for CameraEffects initialization, methods, queue behavior, and parry trigger.
+
+**Regression:** 364/365 checks pass (phase 3 optional). All phases 1–7i green.
+
+**Exit check:** met. Camera feedback system complete and responsive to combat events.
+
 **What remains in Phase 7:**
 - Beat-sync choreography (audio files, boss attack alignment to musical beats)
 - Per-area weather particles (rain, lightning, wind effects)
-- Camera effects (shake on key hits, zoom, pan)
 - Production-ready asset pipeline and docs
