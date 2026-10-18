@@ -1162,10 +1162,12 @@ export class ArenaScene extends Phaser.Scene {
   availableActions(): string[] {
     const e = this.e, f = this.enemy;
     const dist = Math.abs(this.player.x - f.x), dy = Math.abs(this.player.y - f.y);
+    const phase = this.phase();
     const last2 = e.lastActions.slice(-2).map((id) => this.boss.attacks[id]?.perilous);
     const capped = last2.length === 2 && last2.every(Boolean);
     const out: string[] = [];
     for (const a of Object.values(this.boss.attacks)) {
+      if (a.phase2 && phase === 1) continue; // phase 2 only moves not available in phase 1
       if (dist < a.range[0] || dist > a.range[1] || dy > 45 || this.now < (e.cd[a.id] ?? 0)) continue;
       if (a.perilous && capped) continue;
       out.push(a.id);

@@ -99,13 +99,25 @@ const MB: BossDef = {
       hits: [{ a: 3, b: 8, dmg: 24, posture: 20, reach: 200, band: 80, kind: "perilous", around: true }],
       range: [0, 210], cooldownMs: 6500, lunge: 0, perilous: true,
     },
+    THROW: {
+      id: "THROW", desc: "PHASE 2: a fan of thrown daggers spreads across the arena. Projectiles travel forward and can be deflected for +spirit. Jump to clear them entirely. Good for when the player gets comfortable at range.",
+      clip: { sheet: "mb_projectile_cast", from: 0, to: 6, fps: 16, holds: { 2: 400 } },
+      hits: [{ a: 3, b: 5, dmg: 8, posture: 6, reach: 280, band: 80, kind: "normal" }], // hits as projectile spawn, not melee
+      range: [100, 250], cooldownMs: 4500, lunge: 0, phase2: true,
+    },
+    TRAP: {
+      id: "TRAP", desc: "PHASE 2: sets a trap on the ground that explodes when the player gets near, dealing heavy posture damage and a small hit. Punishes predictable movement patterns and forces the player to be careful where they step.",
+      clip: { sheet: "mb_trap_cast", from: 0, to: 9, fps: 14, holds: { 6: 600 } },
+      hits: [{ a: 7, b: 8, dmg: 6, posture: 28, reach: 220, band: 50 }], // trap trigger damage, not melee
+      range: [120, 280], cooldownMs: 5000, lunge: 0, phase2: true,
+    },
   },
   weights: {
-    close: [["SLASH", 3], ["TWIN", 2], ["FLURRY", 1], ["BLOOM", 1], ["BACKSTEP", 1]],
-    mid: [["TWIN", 3], ["SLASH", 1], ["FLURRY", 1], ["APPROACH", 2], ["BLOOM", 1]],
-    far: [["APPROACH", 1]],
+    close: [["SLASH", 3], ["TWIN", 2], ["FLURRY", 1], ["BLOOM", 1], ["BACKSTEP", 1], ["TRAP", 2], ["THROW", 1]],
+    mid: [["TWIN", 3], ["SLASH", 1], ["FLURRY", 1], ["APPROACH", 2], ["BLOOM", 1], ["THROW", 2], ["TRAP", 1]],
+    far: [["APPROACH", 1], ["THROW", 2]],
   },
-  persona: "You are a precise, patient duellist. You prefer to bait and punish: quick cuts, then long pauses. You respect a good guard but you love to find the moment a defender gets comfortable.",
+  persona: "You are a precise, patient duellist. You prefer to bait and punish: quick cuts, then long pauses. You respect a good guard but you love to find the moment a defender gets comfortable. In your second wind, traps and projectiles let you keep your distance and control the space.",
   taunts: [
     { id: "SLOW", text: "Too slow.", when: "the player just got hit or rolled late." },
     { id: "CAREFUL", text: "Guard all you like.", when: "the player has been turtling behind guard." },
@@ -149,13 +161,19 @@ const CM: BossDef = {
       hits: [{ a: 8, b: 11, dmg: 28, posture: 24, reach: 320, band: 70, kind: "sweep" }],
       range: [60, 330], cooldownMs: 7000, lunge: 0, perilous: true,
     },
+    SHELL: {
+      id: "SHELL", desc: "PHASE 2: the Mauler hardens into crystal armour, becoming invulnerable for a few seconds. Light hits bounce off and grant the Mauler no posture damage; heavy hits and perfectly timed counters break through. Use it to tank and reset when the player has momentum.",
+      clip: { sheet: "cm_idle", from: 0, to: 7, fps: 8 }, // holds a defensive pose
+      hits: [{ a: 2, b: 6, dmg: 0, posture: 0, reach: 0 }], // dummy hit; SHELL is defensive, not offensive
+      range: [0, 320], cooldownMs: 6000, lunge: 0, phase2: true,
+    },
   },
   weights: {
-    close: [["SWING", 3], ["BACKHAND", 3], ["SLAM", 2], ["BACKSTEP", 1]],
-    mid: [["SLAM", 3], ["SHATTER", 2], ["APPROACH", 2], ["SWING", 1]],
-    far: [["SHATTER", 2], ["APPROACH", 2]],
+    close: [["SWING", 3], ["BACKHAND", 3], ["SLAM", 2], ["BACKSTEP", 1], ["SHELL", 3]],
+    mid: [["SLAM", 3], ["SHATTER", 2], ["APPROACH", 2], ["SWING", 1], ["SHELL", 2]],
+    far: [["SHATTER", 2], ["APPROACH", 2], ["SHELL", 1]],
   },
-  persona: "You are a slow, enormous miner who hits like a landslide. You are not clever but you are relentless; every blow is heavy and you never rush. You punish a player who gets greedy between your swings and you love to bury a defender in crystals.",
+  persona: "You are a slow, enormous miner who hits like a landslide. You are not clever but you are relentless; every blow is heavy and you never rush. You punish a player who gets greedy between your swings and you love to bury a defender in crystals. In your second wind, crystal armour lets you tank damage and weather the player's attacks.",
   taunts: [
     { id: "BREAK", text: "Everything breaks.", when: "the player has been deflecting well and you have just lost a lot of posture." },
     { id: "MINE", text: "Dig deeper.", when: "the player is at low health." },
@@ -189,13 +207,25 @@ const WH: BossDef = {
       hits: [{ a: 2, b: 3, dmg: 8, posture: 10, reach: 125 }, { a: 7, b: 10, dmg: 10, posture: 14, reach: 135, around: true }, { a: 17, b: 20, dmg: 14, posture: 24, reach: 150, around: true, kind: "heavy" }],
       range: [0, 160], cooldownMs: 3000, lunge: 30, gate: gate(0),
     },
+    VANISH: {
+      id: "VANISH", desc: "PHASE 2: the Hashashin vanishes in a blur (afterimages trail behind) and appears directly behind you, ready to slash. Beats a player who is focused on closing the distance; re-engage and keep the pressure to prevent the teleport.",
+      clip: { sheet: "wh_1_atk", from: 0, to: 7, fps: 20, holds: { 1: 300 } },
+      hits: [{ a: 2, b: 3, dmg: 10, posture: 14, reach: 125 }], // strike on reappear
+      range: [80, 280], cooldownMs: 5500, lunge: 0, phase2: true,
+    },
+    LEAP: {
+      id: "LEAP", desc: "PHASE 2: the Hashashin leaps high and dives down at you from above with a heavy aerial strike. A slow wind-up gives you time to dodge or move back; if you stay close, you are hit from above. Jump to meet them in the air.",
+      clip: { sheet: "wh_jump_up", from: 0, to: 8, fps: 16, holds: { 2: 400 } },
+      hits: [{ a: 6, b: 7, dmg: 16, posture: 20, reach: 140, band: 100, kind: "heavy" }], // impact hit on landing
+      range: [40, 200], cooldownMs: 4800, lunge: 30, phase2: true,
+    },
   },
   weights: {
-    close: [["FLICK", 3], ["WHIRL", 3], ["CYCLONE", 1], ["BACKSTEP", 2]],
-    mid: [["WHIRL", 2], ["FLICK", 2], ["APPROACH", 3]],
-    far: [["APPROACH", 3]],
+    close: [["FLICK", 3], ["WHIRL", 3], ["CYCLONE", 1], ["BACKSTEP", 2], ["VANISH", 2], ["LEAP", 1]],
+    mid: [["WHIRL", 2], ["FLICK", 2], ["APPROACH", 3], ["VANISH", 2], ["LEAP", 1]],
+    far: [["APPROACH", 3], ["LEAP", 2]],
   },
-  persona: "You are a fast, evasive assassin. You live in the player's blind spot: short bursts, quick resets, never standing still. You are fragile, so you avoid trades and look for a mistake. You change the rhythm constantly.",
+  persona: "You are a fast, evasive assassin. You live in the player's blind spot: short bursts, quick resets, never standing still. You are fragile, so you avoid trades and look for a mistake. You change the rhythm constantly. In your second wind, you disappear and dive from above, keeping the player off-balance and scattered.",
   taunts: [
     { id: "CATCH", text: "Catch the wind.", when: "the player just missed a swing or whiffed an attack." },
     { id: "STILL", text: "Standing still?", when: "the player has been standing still for a while." },
@@ -229,13 +259,19 @@ const ECHO: BossDef = {
       hits: [{ a: 12, b: 14, dmg: 22, posture: 24, reach: 230, band: 70, kind: "perilous" }],
       range: [40, 230], cooldownMs: 7000, lunge: 24, perilous: true,
     },
+    PHASE_ECHO: {
+      id: "PHASE_ECHO", desc: "PHASE 2: the Echo multiplies into afterimages that slash from multiple directions. Fast and hard to read. A combination of everything you have done; dodge or guard against the phantoms and watch for the real blow.",
+      clip: { sheet: "fk_2_atk", from: 0, to: 19, fps: 20, holds: { 3: 250, 10: 180 } },
+      hits: [{ a: 4, b: 6, dmg: 9, posture: 12, reach: 125 }, { a: 12, b: 14, dmg: 12, posture: 16, reach: 130 }],
+      range: [20, 170], cooldownMs: 4200, lunge: 26, phase2: true,
+    },
   },
   weights: {
-    close: [["CUT", 3], ["CHAIN", 3], ["EMBER", 1], ["BACKSTEP", 1]],
-    mid: [["CHAIN", 2], ["EMBER", 2], ["APPROACH", 2], ["CUT", 1]],
-    far: [["EMBER", 2], ["APPROACH", 2]],
+    close: [["CUT", 3], ["CHAIN", 3], ["EMBER", 1], ["BACKSTEP", 1], ["PHASE_ECHO", 2]],
+    mid: [["CHAIN", 2], ["EMBER", 2], ["APPROACH", 2], ["CUT", 1], ["PHASE_ECHO", 2]],
+    far: [["EMBER", 2], ["APPROACH", 2], ["PHASE_ECHO", 1]],
   },
-  persona: "You are the Echo: a dark mirror of the player's own fighting style, built from how they actually fought. You know their habits (see snapshot.profile and snapshot.habits): how they roll, how early they tap guard, whether they turtle or trade. Use exactly the moves that beat THEM. You are cold, patient and a little sad.",
+  persona: "You are the Echo: a dark mirror of the player's own fighting style, built from how they actually fought. You know their habits (see snapshot.profile and snapshot.habits): how they roll, how early they tap guard, whether they turtle or trade. Use exactly the moves that beat THEM. You are cold, patient and a little sad. In your second wind, you multiply into afterimages and strike from everywhere at once.",
   taunts: [
     { id: "SELF", text: "I am what you do.", when: "the player has repeated a habit the data shows (same roll direction, early guard taps)." },
     { id: "AGAIN", text: "You always do that.", when: "the player just fell for a pattern they have fallen for before." },

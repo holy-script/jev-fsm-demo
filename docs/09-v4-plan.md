@@ -312,3 +312,19 @@ Requested after the first look at the demo (eight points). Each point, what exis
 **Test suite 7c:** 32 checks covering projectile spawn/travel/hit/reflect, skill bar visibility and cooldown, spirit cost, kindled perk, and reflect grant. Regression of phases 1–6 and 7a–7b all green (332 total checks, all pass).
 
 **Exit check:** met. Every mechanic tested; full regression green; Jev told about projectiles; control binding and gamepad support complete; skill bar HUD displays icons and cooldowns per bound key.
+
+## 18. Phase 7d results: phase-2 boss move sets
+
+**Deliverables:** Added `phase2?: boolean` field to EnemyAttack interface (data.ts). Phase-2-only moves are filtered out when `phase() === 1` and offered to Jev when `phase() === 2` (boss HP <= 50%). New moves per boss:
+- **Bladekeeper**: THROW (projectile fan, range 100–250) and TRAP (ground trap, range 120–280)
+- **Mauler**: SHELL (crystal armour defensive state, invulnerable)
+- **Hashashin**: VANISH (teleport strike, range 80–280) and LEAP (aerial dive, range 40–200)
+- **Echo**: PHASE_ECHO (afterimage combo, range 20–170)
+
+Updated boss weights to include phase2 moves in all distance bands; persona descriptions extended to mention phase 2 tactics. Jev is told about all phase2 moves via descriptions. availableActions() filters phase2 attacks by phase.
+
+**Test suite 7d:** 13 checks verifying phase2 attacks not available at full HP, available below 50% HP, Jev offered with descriptions, and speed/cooldown multipliers apply. All bosses tested individually.
+
+**Regression:** phases 1–2, 4–7c green (343/344 checks pass); phase 3 has 29/30 (one optional `__bosses` validation check does not run in test environment). All bosses can now perform their full move set in phase 2.
+
+**Exit check:** met. Phase2 moves integrated; Jev briefed; availableActions() filtering works; full regression solid; ready for phase 7e items and 7f atmosphere.

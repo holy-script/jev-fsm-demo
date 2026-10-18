@@ -65,6 +65,8 @@ export interface EnemyAttack {
   perilous?: boolean;
   /** a player swing that is in its strike frames when this one connects turns into a clash */
   clashable?: boolean;
+  /** phase 2 only: only offered to Jev and the rules bot when the boss HP falls below phase2.hpPct */
+  phase2?: boolean;
 }
 
 export const HERO = {
