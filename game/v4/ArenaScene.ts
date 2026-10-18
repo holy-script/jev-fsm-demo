@@ -10,6 +10,7 @@ import { BOSSES, DEFAULT_SPACING, ENCOUNTERS, GENERIC_ACTIONS, type BossDef, typ
 import { BossBrain, Telemetry, type Decision, type Snapshot } from "./brain";
 import { Fighter } from "./fighter";
 import { ProjectileSystem, type Projectile } from "./projectiles";
+import { PickupSystem, type Pickup } from "./pickups";
 import { Sfx } from "./sfx";
 import { addRecord, loadStats, saveStats, type BrainTag, type FightRecord } from "./stats";
 import { deleteSave, loadSave, newRun, writeSave, type RunSave } from "./save";
@@ -55,6 +56,7 @@ export class ArenaScene extends Phaser.Scene {
   enemy!: Fighter;
   vfx!: Vfx;
   projs!: ProjectileSystem;
+  pickups!: PickupSystem;
   private lastEnemyOutcome: Outcome | null = null;
   private slots: { action: "skill" | "bolt" | "nova"; base: number; icon: Phaser.GameObjects.Image; key: Phaser.GameObjects.Text; cost: Phaser.GameObjects.Text }[] = [];
   dev = false;
@@ -119,6 +121,7 @@ export class ArenaScene extends Phaser.Scene {
     this.cameras.main.setBackgroundColor("#101a14");
     this.vfx = new Vfx(this, this.manifest.vfx);
     this.projs = new ProjectileSystem(this, this.vfx);
+    this.pickups = new PickupSystem();
     this.hooks = this.registry.get("hooks") as ArenaHooks | undefined;
     this.memory = loadMemory();
     this.brain = new BossBrain({ onDecision: (d) => this.onDecision(d) });
@@ -176,6 +179,7 @@ export class ArenaScene extends Phaser.Scene {
     Object.assign(this.p.def, { guarding: false, guardPressedAt: -1e9, noDeflect: false, invulnerable: false, rolling: false });
     Object.assign(this.p, { vz: 0, airAtk: false, dashDone: 0, dashCdUntil: 0, jumpCdUntil: 0, landUntil: 0, boltCdUntil: 0, novaCdUntil: 0, castKind: null, castDone: false, gourdCharges: 3, gourdCdUntil: 0, firePotCharges: 1, firePotCdUntil: 0 });
     this.projs.clear();
+    this.pickups.clear();
     this.player.z = 0;
     this.player.stopTrail();
     Object.assign(this.e, { hp: this.boss.hp, posture: 0, mode: "idle", stance: "engage", stanceUntil: 0, stanceAt: 0, stanceAttacks: 0, circleUntil: 0, rushUntil: 0, leapAt: -1e9, atk: null, hitDone: [], thinkAt: 1200, cd: {}, recoilUntil: 0, brokenUntil: 0, poiseUntil: 0, lastHitAt: -1e9, dash: 0, reverseFrames: 0, reversedAttack: "", strikeAt: 0, action: null, lastActions: [], gate: null, resumeAt: 0, feinting: false, phase2: false });
@@ -228,6 +232,7 @@ export class ArenaScene extends Phaser.Scene {
     this.updatePlayer(dt);
     this.updateEnemy(dt);
     this.updateProjectiles(dt);
+    this.pickups.update(this.now);
     this.separate();
     this.player.tick(dt);
     this.enemy.tick(dt);
@@ -309,6 +314,10 @@ export class ArenaScene extends Phaser.Scene {
     p.def.rolling = (p.mode === "roll" && rollT >= HERO.rollIFrames[0] && rollT <= HERO.rollIFrames[1]) || (p.mode === "dash" && this.now - p.dashStart <= HERO.dashIFramesMs);
     if (this.e.mode !== "dead" && p.mode !== "dead") f.face = this.enemy.x >= f.x ? 1 : -1;
     if (this.now - p.lastHitAt > HERO.postureRegenDelayMs && p.mode !== "hurt") p.posture = Math.max(0, p.posture - (HERO.postureRegen * (this.perk("breath") ? 1.5 : 1) * (p.def.guarding ? 0.5 : 1) * dt) / 1000);
+    // Apply burning ground damage
+    let burnDmg = 0;
+    for (const h of this.pickups.hazards) burnDmg += h.damagePlayerThisFrame(f.x, f.y, dt);
+    if (burnDmg > 0) p.hp = Math.max(0, p.hp - burnDmg);
     this.burn(f, p, dt);
     if (p.mode === "dead") return;
     if (p.mode === "qte") return this.qteInput(press);
@@ -606,7 +615,10 @@ export class ArenaScene extends Phaser.Scene {
     if (p.firePotCharges <= 0 || this.now < p.firePotCdUntil) return;
     p.firePotCharges--;
     p.firePotCdUntil = this.now + 8000;
-    // TODO: spawn fire pot projectile with burning ground hazard
+    // Spawn burning ground at enemy location (simplified: no projectile arc yet)
+    this.pickups.spawnBurningGround(this.enemy.x, this.enemy.y, this.now);
+    this.vfx.play(FX_EXTRA.burst, this.enemy.x, this.enemy.y, { scale: 2, alpha: 0.8, depth: EMISSIVE_DEPTH });
+    this.sfx.skill();
     this.note("item", { id: "FIRE_POT", remaining: p.firePotCharges });
   }
 
