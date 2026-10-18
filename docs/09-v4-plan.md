@@ -1,6 +1,6 @@
 # 09. v4 plan: "ARENA" proper demo
 
-Status: **Phases 0 (assets, 9), 1 (kernel, 10), 2 (combat depth, 11) 3 (bosses and Jev, 12) 4 (world, 13) 5 (UI/UX, 14) and 6 (balance and demo, 15) done.** What remains is human play-testing and the polish list in 15.6. Decisions taken with the user: free assets only; v4 is a new route `/arena` in `game/v4/` (v3 `/duel` stays untouched and playable); the setting follows the environment packs (forest, ruined river temple, graveyard), so the v3 monastery/foundry/summit story is rewritten.
+Status: **Phases 0 (assets, 9), 1 (kernel, 10), 2 (combat depth, 11) 3 (bosses and Jev, 12) 4 (world, 13) 5 (UI/UX, 14) and 6 (balance and demo, 15) done.** Phase 7 (movement, spacing, fire, items, atmosphere) is planned in section 16 and in progress; human play-testing and the polish list in 15.6 remain. Decisions taken with the user: free assets only; v4 is a new route `/arena` in `game/v4/` (v3 `/duel` stays untouched and playable); the setting follows the environment packs (forest, ruined river temple, graveyard), so the v3 monastery/foundry/summit story is rewritten.
 
 Goal: a polished 10 to 15 minute demo where Jev is visibly the enemy's brain, with a consistent art style, better environments, richer combat (combos, reverse-animation parries, quick-time events) and a real UI.
 
@@ -276,3 +276,31 @@ Arrow keys move focus through every menu, Enter activates; with a pad the d-pad 
 
 ### 15.6 What is left (needs a human, or is deliberately deferred)
 Play-testing: feel of the parry window, telegraph lengths, QTE timing, hit-stop and shake, audio levels, how long a real first run takes (target 10 to 15 minutes with the guided demo). Beat-synced choreography (the beat clock exists but fights are not choreographed to it). A second area-to-area walking scene and a visible shrine location. Hashashin's teleport special, Mauler's crystal-shell guard and the Bladekeeper's projectile and trap (art and no entity system yet). Touch support. A production build check (`next build`) was not run because it would overwrite the dev server's `.next`; run it before deploying. The 18 paid pimen buff/debuff packs and the paid chierit characters remain unused by design.
+
+## 16. Phase 7 plan: movement, spacing, fire, items, atmosphere
+
+Requested after the first look at the demo (eight points). Each point, what exists, what the art offers, and the decision.
+
+| # | Point | Audit (what v4 does now) | Art available | Decision |
+|---|---|---|---|---|
+| 1 | Jump | none; sweeps cannot be answered by jumping | `jump_up/jump/jump_down` for Fire Knight and every boss | **Jump action** with a z-axis (sprite lifts, shadow stays). Airborne beats **sweeps** (new `low` hits). Roll no longer protects against a sweep (otherwise jump is pointless). A **jump counter** (an air attack right after leaping a sweep) deals bonus posture, like Sekiro's jump kick. |
+| 2 | Mid-air combat | none | `air_atk` for Fire Knight, Bladekeeper (dagger volley), Mauler, Hashashin (aerial whirl) | **Air attack** (attack while airborne: `fk_air_atk`, hits 3 to 5, dives you forward) and **boss aerial moves** in phase 2 (Hashashin leaps and whirls from above; Bladekeeper's air volley). Air-vs-air swings clash. |
+| 3 | Fire spells and skills | only Flame Burst; pimen fire packs (firebolt, breath, explosions) unused | pimen Fire 1 and 2 | **Skill bar of three**: Flame Burst (E), **Ember Bolt** (Q, a ranged projectile, 1 spirit), **Inferno Ring** (R, an area blast, 3 spirit). Fire dash trails. A real **projectile entity system** (also used by bosses). |
+| 4 | Unused boss moves in phase 2 | Hashashin teleport, Mauler crystal shell, Bladekeeper projectile and trap all unused | the sheets exist | **Phase-2-only moves** (flag `phase2: true`, filtered out in phase 1, offered to Jev only in phase 2): Bladekeeper THROW (projectile fan) and TRAP (ground trap entity), Mauler SHELL (crystal guard: armoured, reflects light hits), Hashashin VANISH (teleport behind the player) and LEAP (aerial dive), Echo PHASE-ECHO (afterimage chain). |
+| 5 | Dash | none | no dash animation | **Dash** action: a short burst (about 150 px, 0.2 s) with brief invulnerability and a cooldown; drawn as the run pose stretched along the motion plus **afterimages** and dust. Backward, forward or sideways by input. Different from roll: shorter, no recovery, spacing tool. |
+| 6 | Reverse animations and afterimages | reverse used in **two** places (parry rewind, feint); afterimages in **none** | n/a (a rendering technique) | **Afterimage system** (ghost sprites copying the live frame, tinted, fading) used for dash, roll, lunges, boss gap-closers and teleports, Echo's whole attack set, parry recoil (the boss's rewind leaves a trail) and the jump counter. **Reverse** extended to: the jump counter (the boss's sweep rewinds), boss retreat steps (a back-hop plays the run clip in reverse, so it moves backwards facing you), and the Echo's phase change. |
+| 7 | Ebb and flow | bosses walk up and stay inside the player's face; BACKSTEP is just one option Jev rarely picks | n/a | **Spacing director** in the engine: each boss has a preferred range band that **oscillates** (engage, then disengage); personal space (a boss that is not attacking will not stay under 85 px); new actions **RETREAT** and **CIRCLE** (offered to Jev and the rules bot); phase-2 bosses use gap-closers (dash, vanish) to re-engage. Jev's snapshot gets a `spacing` block (distance trend, time since the last disengage). |
+| 8 | Environment, items and uses | ambient particles only; no items | icon pack (bomb, heart, potion, gems, mugs), pimen VFX | **Items**: Healing Gourd (H, 3 charges, refilled at the shrine, heals over 1 s while slowed), Fire Pot (G, throwable bomb with burning ground), **pickup orbs** (heart = heal, blue gem = spirit, bomb = fire pot) that spawn periodically and from perfect play. **Hazards**: burning ground, the Bladekeeper's traps. **Atmosphere** per area: rain and ripples (river), lightning flashes (ruins), drifting cloud shadows, wind gusts that bend leaves and sway grass and trees, glow lights with flicker, dust puffs (dash, roll, land), a low-HP vignette pulse. |
+
+**Stages** (each ends with `tsc` clean, its own suite, all earlier suites green, a commit):
+- **7a Movement and afterimages**: afterimage system, z-axis, jump, air attack, dash, sweep rules and jump counter, keymap and pad bindings, HUD hints.
+- **7b Spacing director**: preferred-range oscillation, personal space, RETREAT and CIRCLE, snapshot `spacing`, reverse back-hops.
+- **7c Fire skills**: projectile entities, Ember Bolt, Inferno Ring, three-skill bar, kindled perk applies to all.
+- **7d Phase 2 move sets**: the new boss moves and the entities they need (traps, projectiles, shell, teleport, leap), Jev descriptions, the bot learns to jump.
+- **7e Items and pickups**: gourd, fire pot, orbs, burning ground, HUD item bar, shrine refill.
+- **7f Atmosphere**: per-area weather and light, dust, lightning, camera punches, low-HP pulse.
+- **7g** Re-run the balance bot (it must learn jump, dash and items), retune, update docs.
+
+**Rules for the build:** every new mechanic is data first (`data.ts`, `bosses.ts`, `areas.ts`), gets a test, and gets a Jev description if the boss uses it; boss options stay filtered by legality; nothing may require new art we do not have (dash and teleports use existing frames with afterimages); controls stay rebindable and pad-operable; the existing suites' numbers are only changed where a mechanic truly changes them (sweeps vs roll).
+
+**Non-goals:** two-player or networking; new characters; a new tileset; replacing Jev's question format.
