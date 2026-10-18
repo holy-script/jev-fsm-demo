@@ -60,6 +60,9 @@ for (const boss of bosses) {
           if (d.qteKind === "clash") { mashT -= 16.7; if (mashT <= 0) { f.attack = true; mashT = 1000 / (level === "novice" ? 6 : level === "competent" ? 8 : 10); } return f; }
           if (p.mode === "dead" || e.mode === "dead") return f;
           f.guardHeld = now < guardUntil;
+          // use items: gourd when low, fire pot when boss is open
+          if (p.hp < 40 && p.gourdCharges > 0) { f.item = true; }
+          else if (e.mode === "idle" && p.firePotCharges > 0 && dist < 200) { f.pot = true; }
           // face the right depth and distance
           const want = e.mode === "attack" || e.mode === "recoil" ? 100 : 95;
           f.dir = { x: dist > want + 8 ? Math.sign(dx) : dist < want - 25 ? -Math.sign(dx) : 0, y: Math.abs(dy) > 14 ? Math.sign(dy) : 0, any: false };
@@ -72,7 +75,9 @@ for (const boss of bosses) {
             if (!seen.decided && now - seen.t0 >= seen.react) {
               seen.decided = true;
               const hits = e.atk.hits, per = hits.some((h) => h.kind === "perilous");
+              const isSweep = hits.some((h) => h.kind === "sweep");
               if (rnd() > L.answer) plan = { kind: "none" };
+              else if (isSweep) plan = { kind: "jump" }; // sweeps are only avoided by jumping
               else if (per) plan = { kind: rnd() < L.counter ? "counter" : "roll" };
               else plan = { kind: rnd() < L.roll ? "roll" : "guard" };
               if (rnd() < L.greed && plan.kind !== "none" && !per) plan = { kind: "greedy" };
@@ -83,8 +88,10 @@ for (const boss of bosses) {
               if (i >= 0) {
                 const h = e.atk.hits[i], rem = remaining(e.atk, h) + gauss() * L.sigma;
                 const perHit = h.kind === "perilous";
+                const isSweep = h.kind === "sweep";
                 const kind = perHit && plan.kind === "guard" ? "roll" : plan.kind;
-                if (kind === "guard" && rem <= 70 && now - lastGuard > 280) { f.guard = true; guardUntil = now + 380; lastGuard = now; }
+                if (kind === "jump" && rem <= 140 && p.mode === "free") { f.jump = true; }
+                else if (kind === "guard" && rem <= 70 && now - lastGuard > 280) { f.guard = true; guardUntil = now + 380; lastGuard = now; }
                 else if (kind === "counter" && perHit && rem <= 100) { f.attack = true; }
                 else if (kind === "counter" && !perHit && rem <= 70 && now - lastGuard > 280) { f.guard = true; guardUntil = now + 380; lastGuard = now; }
                 else if (kind === "roll" && rem <= 120 && now - lastRoll > 450) { f.roll = true; lastRoll = now; }
@@ -98,7 +105,9 @@ for (const boss of bosses) {
           const open = ["idle", "recoil", "flinch", "broken"].includes(e.mode);
           // a careful player does not start a chain when the boss is about to act again (a chain locks you in until its last frame)
           const safe = e.mode !== "idle" || !e.auto || e.action || e.thinkAt - now > L.safe || p.mode === "attack" && p.chain > 0 && e.thinkAt - now > L.safe * 0.5;
-          if (open && safe && Math.abs(dy) < 32 && dist < 125 && p.mode !== "hurt" && p.mode !== "roll") {
+          // dash when boss is coming in and player is crowded (repositioning tool)
+          if (dist < 80 && e.mode === "attack" && p.mode === "free" && now - lastAtk > 600) { f.dash = true; f.dir = { x: -Math.sign(dx) || 1, y: 0, any: true }; lastAtk = now; }
+          else if (open && safe && Math.abs(dy) < 32 && dist < 125 && p.mode !== "hurt" && p.mode !== "roll") {
             if (p.spirit >= 2 && dist < 170 && e.mode !== "broken" && now - lastAtk > 400) { f.skill = true; lastAtk = now; }
             else if (now - lastAtk > 160) { f.attack = true; lastAtk = now; }
           }
