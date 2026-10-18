@@ -10,10 +10,11 @@ export class Vfx {
     }
   }
 
-  play(key: string, x: number, y: number, o: { scale?: number; flip?: boolean; tint?: number; rot?: number; fps?: number; add?: boolean; depth?: number } = {}) {
+  play(key: string, x: number, y: number, o: { scale?: number; flip?: boolean; tint?: number; rot?: number; fps?: number; add?: boolean; depth?: number; alpha?: number } = {}) {
     if (!this.scene.anims.exists("vfx:" + key)) return null;
     const s = this.scene.add.sprite(x, y, key, 0).setScale((o.scale ?? 1) * SCALE).setFlipX(!!o.flip).setRotation(o.rot ?? 0).setDepth(o.depth ?? 900);
     if (o.tint !== undefined) s.setTint(o.tint);
+    if (o.alpha !== undefined) s.setAlpha(o.alpha);
     if (o.add) s.setBlendMode(Phaser.BlendModes.ADD);
     s.play({ key: "vfx:" + key, frameRate: o.fps ?? 22 });
     s.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => s.destroy());

@@ -1,7 +1,7 @@
 import { HERO, type HitDef } from "./data";
 
 /** Pure combat rules (no Phaser) so the suites can exercise them directly through window.__arena. */
-export type Outcome = "dodged" | "deflected" | "blocked" | "hit" | "missed" | "countered";
+export type Outcome = "dodged" | "deflected" | "blocked" | "hit" | "missed" | "countered" | "leapt";
 
 export interface Defender {
   guarding: boolean;
@@ -9,8 +9,10 @@ export interface Defender {
   guardPressedAt: number;
   /** the last press came too soon after the one before it: no deflect window (anti guard-mash) */
   noDeflect: boolean;
-  /** invulnerable right now (roll i-frames, post-hit grace) */
+  /** post-hit grace: protects against everything except nothing (even a sweep) */
   invulnerable: boolean;
+  /** roll or dash i-frames: protect against everything except a sweep */
+  rolling: boolean;
 }
 
 /** Is the target inside the attacker's reach? Forward ellipse: `reach` ahead of the attacker, a little behind, `band` of depth tolerance. */
@@ -21,12 +23,14 @@ export function inReach(ax: number, ay: number, face: 1 | -1, tx: number, ty: nu
 }
 
 /** What happens when an enemy hit connects with a defender at scene time `now`. */
-export function resolveEnemyHit(d: Defender, now: number, hit: HitDef, inRangeNow: boolean, countered = false, deflectMs = HERO.deflectMs): Outcome {
+export function resolveEnemyHit(d: Defender, now: number, hit: HitDef, inRangeNow: boolean, countered = false, deflectMs = HERO.deflectMs, airborne = false): Outcome {
   if (!inRangeNow) return "missed";
-  if (d.invulnerable) return "dodged";
   const kind = hit.kind ?? "normal";
+  // a sweep runs along the ground: only a jump clears it (post-hit grace still protects; roll and dash i-frames do not)
+  if (kind === "sweep") return airborne ? "leapt" : d.invulnerable ? "dodged" : "hit";
+  if (d.invulnerable || d.rolling) return "dodged";
   if (kind === "perilous") return countered ? "countered" : "hit"; // guard does nothing against a perilous attack
-  if (d.guarding && kind !== "sweep") {
+  if (d.guarding) {
     const fresh = now - d.guardPressedAt <= deflectMs;
     return fresh && !d.noDeflect ? "deflected" : "blocked";
   }

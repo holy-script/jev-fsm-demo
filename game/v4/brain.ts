@@ -6,7 +6,7 @@ import type { Habits } from "./memory";
 /** The boss's decision-making: Jev (through /api/jev/ask) with a hand-written rules bot as fallback and as the comparison opponent.
  *  Jev only chooses among options the engine says are legal right now; the engine validates and executes. See docs/02. */
 
-export type Outcome = "deflected" | "blocked" | "dodged" | "hit" | "countered" | "missed";
+export type Outcome = "deflected" | "blocked" | "dodged" | "hit" | "countered" | "missed" | "leapt";
 export type Reaction = "roll" | "guard" | "attack" | "none";
 
 interface MoveStats {
@@ -16,10 +16,11 @@ interface MoveStats {
   dodged: number;
   hit: number;
   countered: number;
+  leapt: number;
   react: Record<Reaction, number>;
 }
-const blank = (): MoveStats => ({ thrown: 0, deflected: 0, blocked: 0, dodged: 0, hit: 0, countered: 0, react: { roll: 0, guard: 0, attack: 0, none: 0 } });
-type EventType = "attack" | "guard" | "deflect" | "roll" | "hurt" | "skill" | "counter";
+const blank = (): MoveStats => ({ thrown: 0, deflected: 0, blocked: 0, dodged: 0, hit: 0, countered: 0, leapt: 0, react: { roll: 0, guard: 0, attack: 0, none: 0 } });
+type EventType = "attack" | "guard" | "deflect" | "roll" | "hurt" | "skill" | "counter" | "jump" | "dash";
 
 /** What Jev gets to know about the player: rolling windows of actions plus how the player has answered each move. */
 export class Telemetry {
@@ -88,18 +89,18 @@ export class Telemetry {
   recent(now: number, ms: number) {
     const e = this.events.filter((x) => now - x.t <= ms);
     const n = (t: EventType) => e.filter((x) => x.type === t).length;
-    return { windowSec: ms / 1000, attacks: n("attack"), guardTaps: n("guard"), deflects: n("deflect"), counters: n("counter"), rolls: n("roll"), hitsTaken: n("hurt"), skills: n("skill") };
+    return { windowSec: ms / 1000, attacks: n("attack"), guardTaps: n("guard"), deflects: n("deflect"), counters: n("counter"), rolls: n("roll"), jumps: n("jump"), dashes: n("dash"), hitsTaken: n("hurt"), skills: n("skill") };
   }
   summary() {
     const out: Record<string, unknown> = {};
-    for (const [m, s] of Object.entries(this.vsMove)) if (s.thrown) out[m] = { thrown: s.thrown, deflected: s.deflected, blocked: s.blocked, dodged: s.dodged, countered: s.countered, hit: s.hit, firstReaction: s.react };
+    for (const [m, s] of Object.entries(this.vsMove)) if (s.thrown) out[m] = { thrown: s.thrown, deflected: s.deflected, blocked: s.blocked, dodged: s.dodged, countered: s.countered, leapt: s.leapt, hit: s.hit, firstReaction: s.react };
     return out;
   }
 }
 
 export interface Snapshot {
   boss: { name: string; phase: 1 | 2; hpPct: number; posturePct: number; mode: string; lastActions: string[]; sameActionStreak: number };
-  player: { hpPct: number; posturePct: number; spirit: number; state: string; distancePx: number; guardHeld: boolean; riposteReady: boolean; standingStillMs: number };
+  player: { hpPct: number; posturePct: number; spirit: number; state: string; airborne: boolean; distancePx: number; guardHeld: boolean; riposteReady: boolean; standingStillMs: number };
   recent: ReturnType<Telemetry["recent"]>;
   vsMove: Record<string, unknown>;
   lastOutcome: { move: string; outcome: string } | null;
@@ -129,6 +130,8 @@ Rules you must reason with:
 - The player DEFLECTS a normal or heavy attack by tapping guard just before impact (about 0.16 s): no damage to them, YOUR posture rises, and your swing is thrown back. Holding guard instead BLOCKS: chip damage, THEIR posture rises. Only a tap shortly before the hit deflects, so a delayed swing (a pause before impact) beats players who tap early.
 - PERILOUS moves (marked in their description) cannot be blocked or deflected: guard does nothing. The player counters one by pressing ATTACK in the last 0.2 s before it lands (your posture jumps) or slips it with a roll (your posture rises). Players who only guard are punished by perilous moves; players who roll or counter well should see them rarely.
 - A roll gives brief invulnerability: it beats a single fast hit if timed, and rolling through a perilous move slips it. It does not beat a wide around-you whirlwind that lands late.
+- A SWEEP (marked in a move's description) is a low, unblockable strike along the ground. Rolling does NOT protect against it and neither does guard: only a JUMP clears it. A player who leaps it can answer with an air attack (a jump counter) that rewinds your swing and takes a lot of posture. Players who never jump are punished by sweeps; players who jump on cue should see them less often and be baited with other moves.
+- The player can also DASH (a short burst with a brief invulnerable start, good for spacing) and attack from the air. Nothing they do in the air protects them from a normal strike, so a ground attack aimed at a jumping player still hits.
 - Moves with a branch point (gate) let you choose how the combo continues after the first hit. DELAY beats early guard taps. FEINT rewinds your swing and baits a reaction. CONTINUE is the default.
 - If two of your attacks clash with the player's swing in the same instant, a mash decides who is thrown back.
 - snapshot.habits says how this player rolls (toward/away/sideways), how early they tap guard (guardTapLeadMs: large means they tap early, so delayed hits beat them) and whether they swing into your recovery or into your wind-up. snapshot.memory and snapshot.profile, when present, are what you learned in earlier fights: use it from your very first move.

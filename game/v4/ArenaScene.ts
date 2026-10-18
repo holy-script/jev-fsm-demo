@@ -1,7 +1,7 @@
 import * as Phaser from "phaser";
 import { chip, inReach, pressGuard, resolveEnemyHit, type Defender, type Outcome } from "./combat";
 import {
-  CLASH, COUNTER, DEATHBLOW, ENEMY, GATE_WAIT, FX, FX_EXTRA, HERO, HERO_ATTACKS, HERO_CLIPS, SCALE, SKILLS, VIEW_H, VIEW_W,
+  AIR_ATTACK, JUMP_COUNTER, CLASH, COUNTER, DEATHBLOW, ENEMY, GATE_WAIT, FX, FX_EXTRA, HERO, HERO_ATTACKS, HERO_CLIPS, SCALE, SKILLS, VIEW_H, VIEW_W,
   type EnemyAttack, type HitDef, type PlayerAttack,
 } from "./data";
 import { AREAS } from "./areas";
@@ -12,7 +12,7 @@ import { Fighter } from "./fighter";
 import { Sfx } from "./sfx";
 import { addRecord, loadStats, saveStats, type BrainTag, type FightRecord } from "./stats";
 import { deleteSave, loadSave, newRun, writeSave, type RunSave } from "./save";
-import { GameInput, type InputFrame } from "./input";
+import { GameInput, blankFrame, type InputFrame } from "./input";
 import { loadMemory, memoryFor, profile, remember, saveMemory, type MemoryStore } from "./memory";
 import { MashRun, QteRun, type DeathblowGrade } from "./qte";
 import { loadSettings, type ArenaSettings } from "./settings";
@@ -25,7 +25,7 @@ import { Vfx } from "./vfx";
  *  WASD/arrows move, J or click attack (press again inside the chain window), Space/K guard (tap just before a hit = perfect parry),
  *  Shift/L roll. Dev: P toggles the enemy AI, O/I force its attacks, R resets. */
 
-type PMode = "free" | "attack" | "guard" | "roll" | "hurt" | "dead" | "qte";
+type PMode = "free" | "attack" | "guard" | "roll" | "hurt" | "dead" | "qte" | "air" | "dash" | "land";
 type EMode = "idle" | "attack" | "recoil" | "flinch" | "broken" | "dead";
 export interface ArenaLogEntry {
   t: number;
@@ -58,11 +58,13 @@ export class ArenaScene extends Phaser.Scene {
   p = {
     hp: HERO.hp, posture: 0, mode: "free" as PMode, chain: 0, atk: null as PlayerAttack | null, hitDone: [] as boolean[],
     queued: false, earlyAt: -1e9, recovering: false, dash: 0, invulnUntil: 0, rollStart: 0, rollCdUntil: 0, rollDir: { x: 1, y: 0 },
-    hurtUntil: 0, lastHitAt: -1e9, riposteUntil: 0, spirit: 0, counterAt: -1e9, def: { guarding: false, guardPressedAt: -1e9, noDeflect: false, invulnerable: false } as Defender,
+    hurtUntil: 0, lastHitAt: -1e9, riposteUntil: 0, spirit: 0, counterAt: -1e9,
+    vz: 0, airAtk: false, dashStart: 0, dashDone: 0, dashDir: { x: 1, y: 0 }, dashCdUntil: 0, jumpCdUntil: 0, landUntil: 0,
+    def: { guarding: false, guardPressedAt: -1e9, noDeflect: false, invulnerable: false, rolling: false } as Defender,
   };
   e = {
     hp: 160, posture: 0, mode: "idle" as EMode, auto: true, atk: null as EnemyAttack | null, hitDone: [] as boolean[], thinkAt: 0,
-    cd: {} as Record<string, number>, action: null as { id: string; until: number } | null, lastActions: [] as string[], gate: null as { a: EnemyAttack; startedAt: number; decision: string | null; token: number } | null, resumeAt: 0, feinting: false, phase2: false, recoilUntil: 0, brokenUntil: 0, poiseUntil: 0, lastHitAt: -1e9, dash: 0, reverseFrames: 0, reversedAttack: "", strikeAt: 0,
+    cd: {} as Record<string, number>, leapAt: -1e9, action: null as { id: string; until: number } | null, lastActions: [] as string[], gate: null as { a: EnemyAttack; startedAt: number; decision: string | null; token: number } | null, resumeAt: 0, feinting: false, phase2: false, recoilUntil: 0, brokenUntil: 0, poiseUntil: 0, lastHitAt: -1e9, dash: 0, reverseFrames: 0, reversedAttack: "", strikeAt: 0,
   };
 
   private keys!: Record<string, Phaser.Input.Keyboard.Key>;
@@ -122,7 +124,7 @@ export class ArenaScene extends Phaser.Scene {
     this.frame = this.inp.poll();
     const K = Phaser.Input.Keyboard.KeyCodes;
     const kb = this.input.keyboard!;
-    this.keys = Object.fromEntries(Object.entries({ P: K.P, O: K.O, I: K.I, R: K.R, F: K.F, N: K.N }).map(([n, c]) => [n, kb.addKey(c)]));
+    this.keys = Object.fromEntries(Object.entries({ P: K.F1, O: K.F2, I: K.F3, R: K.F4, F: K.F, N: K.F6 }).map(([n, c]) => [n, kb.addKey(c)]));
     const t = (k: string, x: number, y: number, size = 14, color = "#e6edf3", origin = 0) => (this.texts[k] = this.add.text(x, y, "", { fontFamily: "monospace", fontSize: size + "px", color }).setDepth(2100).setOrigin(origin, 0));
     t("enemyName", VIEW_W / 2, 31, 15, "#2f2012", 0.5);
     this.texts.enemyName.setOrigin(0.5, 0.5).setFontStyle("bold");
@@ -134,7 +136,7 @@ export class ArenaScene extends Phaser.Scene {
     t("debug", 12, 8, 11, "#58a6ff");
     t("qtekey", VIEW_W / 2, 150, 34, "#ffffff", 0.5);
     t("qtemsg", VIEW_W / 2, 110, 16, "#ffd166", 0.5);
-    this.texts.help.setText("WASD move   J/click attack (press again in the chain window)   Space guard (tap just before a hit = PARRY)   Shift roll   E flame burst (2 spirit)" + (this.dev ? "   P ai  O/I enemy attacks  R reset" : "   R reset"));
+    this.texts.help.setText("WASD move   J/click attack (press again in the chain window)   Space guard (tap just before a hit = PARRY)   Shift roll   I jump   U dash   E flame burst" + (this.dev ? "   F1 ai  F2/F3 enemy attacks  F4 reset  F6 next boss" : ""));
     this.game.events.on("arena:settings", () => this.applySettings());
     this.brain.mode = this.settings.brain;
     this.reset();
@@ -161,8 +163,11 @@ export class ArenaScene extends Phaser.Scene {
     this.pendingClash = null;
     this.player.anim.speed = 1;
     this.enemy.anim.speed = 1;
-    Object.assign(this.p.def, { guarding: false, guardPressedAt: -1e9, noDeflect: false, invulnerable: false });
-    Object.assign(this.e, { hp: this.boss.hp, posture: 0, mode: "idle", atk: null, hitDone: [], thinkAt: 1200, cd: {}, recoilUntil: 0, brokenUntil: 0, poiseUntil: 0, lastHitAt: -1e9, dash: 0, reverseFrames: 0, reversedAttack: "", strikeAt: 0, action: null, lastActions: [], gate: null, resumeAt: 0, feinting: false, phase2: false });
+    Object.assign(this.p.def, { guarding: false, guardPressedAt: -1e9, noDeflect: false, invulnerable: false, rolling: false });
+    Object.assign(this.p, { vz: 0, airAtk: false, dashDone: 0, dashCdUntil: 0, jumpCdUntil: 0, landUntil: 0 });
+    this.player.z = 0;
+    this.player.stopTrail();
+    Object.assign(this.e, { hp: this.boss.hp, posture: 0, mode: "idle", leapAt: -1e9, atk: null, hitDone: [], thinkAt: 1200, cd: {}, recoilUntil: 0, brokenUntil: 0, poiseUntil: 0, lastHitAt: -1e9, dash: 0, reverseFrames: 0, reversedAttack: "", strikeAt: 0, action: null, lastActions: [], gate: null, resumeAt: 0, feinting: false, phase2: false });
     this.telemetry.reset();
     this.brain.reset();
     this.brain.mode = this.settings.brain; // every new fight starts on the brain chosen in Settings (F still swaps it mid-fight)
@@ -199,8 +204,8 @@ export class ArenaScene extends Phaser.Scene {
     }
     this.now += dt;
     this.frame = this.inp.poll();
-    if (this.botFrame) this.frame = { dir: { x: 0, y: 0, any: false }, attack: false, guard: false, roll: false, skill: false, guardHeld: false, pause: false, pad: false, ...this.botFrame() };
-    if (this.mode === "menu") this.frame = { dir: { x: 0, y: 0, any: false }, attack: false, guard: false, roll: false, skill: false, guardHeld: false, pause: false, pad: false };
+    if (this.botFrame) this.frame = { ...blankFrame(), ...this.botFrame() };
+    if (this.mode === "menu") this.frame = blankFrame();
     else if (this.run && this.e.mode !== "dead" && this.p.mode !== "dead") this.run.playMs += raw;
     if (this.frame.pause) this.hooks?.onPause?.();
     if (Phaser.Input.Keyboard.JustDown(this.keys.R)) this.reset();
@@ -248,6 +253,7 @@ export class ArenaScene extends Phaser.Scene {
 
   /** Keep the two bodies from overlapping (depth counts for less than width). */
   private separate() {
+    if (this.player.z > 30 || this.enemy.z > 30) return; // a jumping fighter passes over the other
     const dx = this.enemy.x - this.player.x;
     const dy = (this.enemy.y - this.player.y) * 2.2;
     const d = Math.hypot(dx, dy);
@@ -263,7 +269,7 @@ export class ArenaScene extends Phaser.Scene {
   // ---------------------------------------------------------------- player
   private updatePlayer(dt: number) {
     const p = this.p, f = this.player;
-    const press = { attack: this.frame.attack, guard: this.frame.guard, roll: this.frame.roll, skill: this.frame.skill };
+    const press = { attack: this.frame.attack, guard: this.frame.guard, roll: this.frame.roll, skill: this.frame.skill, jump: this.frame.jump, dash: this.frame.dash };
     if (press.attack) p.counterAt = this.now; // a perilous strike landing within COUNTER ms of this is countered
     if (press.attack) {
       this.telemetry.react("attack", this.now);
@@ -282,7 +288,8 @@ export class ArenaScene extends Phaser.Scene {
     }
     const guardHeld = this.frame.guardHeld;
     const rollT = this.now - p.rollStart;
-    p.def.invulnerable = this.now < p.invulnUntil || (p.mode === "roll" && rollT >= HERO.rollIFrames[0] && rollT <= HERO.rollIFrames[1]);
+    p.def.invulnerable = this.now < p.invulnUntil;
+    p.def.rolling = (p.mode === "roll" && rollT >= HERO.rollIFrames[0] && rollT <= HERO.rollIFrames[1]) || (p.mode === "dash" && this.now - p.dashStart <= HERO.dashIFramesMs);
     if (this.e.mode !== "dead" && p.mode !== "dead") f.face = this.enemy.x >= f.x ? 1 : -1;
     if (this.now - p.lastHitAt > HERO.postureRegenDelayMs && p.mode !== "hurt") p.posture = Math.max(0, p.posture - (HERO.postureRegen * (this.perk("breath") ? 1.5 : 1) * (p.def.guarding ? 0.5 : 1) * dt) / 1000);
     this.burn(f, p, dt);
@@ -294,6 +301,8 @@ export class ArenaScene extends Phaser.Scene {
       case "free": {
         this.standingStill = this.dirInput().any ? 0 : this.standingStill + dt;
         if (press.roll && this.now >= p.rollCdUntil) return this.startRoll(dir);
+        if (press.jump && this.now >= p.jumpCdUntil) return this.startJump();
+        if (press.dash && this.now >= p.dashCdUntil) return this.startDash(dir);
         if (press.guard) return this.startGuard();
         if (press.skill) return this.startSkill("FLAME");
         if (press.attack) return this.canDeathblow() ? this.startDeathblow() : this.startAttack("L1");
@@ -316,6 +325,8 @@ export class ArenaScene extends Phaser.Scene {
         // cancel into defence once the damaging frames are over
         if (frame > lastHit || p.recovering) {
           if (press.roll && this.now >= p.rollCdUntil) return this.startRoll(dir);
+          if (press.dash && this.now >= p.dashCdUntil) return this.startDash(dir);
+          if (press.jump && this.now >= p.jumpCdUntil) return this.startJump();
           if (press.guard) return this.startGuard();
         }
         break;
@@ -344,7 +355,117 @@ export class ArenaScene extends Phaser.Scene {
         if (this.now >= p.hurtUntil) p.mode = "free";
         break;
       }
+      case "air": {
+        p.vz -= (HERO.gravity * dt) / 1000;
+        f.z += (p.vz * dt) / 1000;
+        if (dir.any) this.step(f, (dir.x * HERO.airSpeed * dt) / 1000, (dir.y * HERO.airSpeed * dt) / 1000);
+        if (press.attack && !p.atk && !p.airAtk) return this.startAirAttack();
+        if (p.atk) this.playerHits(p.atk, f.anim.frame);
+        else {
+          const c = p.vz > 0 ? HERO_CLIPS.jumpUp : HERO_CLIPS.jumpDown;
+          if (f.anim.sheet !== c.sheet) f.play(c, { loop: true });
+        }
+        if (f.z <= 0 && p.vz < 0) this.land();
+        break;
+      }
+      case "dash": {
+        const u = Math.min(1, (this.now - p.dashStart) / HERO.dashMs);
+        const target = HERO.dashDist * (1 - (1 - u) * (1 - u));
+        const stepPx = target - p.dashDone;
+        p.dashDone = target;
+        this.step(f, p.dashDir.x * stepPx, p.dashDir.y * stepPx);
+        if (u >= 1) p.mode = "free";
+        break;
+      }
+      case "land": {
+        if (press.roll && this.now >= p.rollCdUntil) return this.startRoll(dir);
+        if (press.dash && this.now >= p.dashCdUntil) return this.startDash(dir);
+        if (press.attack) return this.startAttack("L1");
+        if (this.now >= p.landUntil) p.mode = "free";
+        break;
+      }
     }
+  }
+
+  // ---- vertical movement: jump, air attack, landing; and the dash
+  private startJump() {
+    const p = this.p, f = this.player;
+    p.mode = "air";
+    p.atk = null;
+    p.chain = 0;
+    p.def.guarding = false;
+    p.vz = HERO.jumpV;
+    p.airAtk = false;
+    p.jumpCdUntil = this.now + HERO.jumpCdMs;
+    f.z = 0.01;
+    f.play(HERO_CLIPS.jumpUp, { loop: true });
+    this.vfx.play(FX_EXTRA.smokeA, f.x, f.y - 4, { scale: 0.6, alpha: 0.7 });
+    this.sfx.whoosh(0.2, 0.2, 300, 900);
+    this.telemetry.record("jump", this.now);
+    this.note("jump");
+  }
+
+  private startAirAttack() {
+    const p = this.p, f = this.player, a = AIR_ATTACK;
+    p.atk = a;
+    p.airAtk = true;
+    p.hitDone = a.hits.map(() => false);
+    p.recovering = false;
+    p.queued = false;
+    p.dash += f.face * this.reachableLunge(a.lunge);
+    f.startTrail(160, 0xffe0b0, 40, 0.4, 220);
+    f.play(a.clip, {
+      onDone: () => {
+        if (p.mode === "air") p.atk = null;
+        else if (p.mode === "attack") {
+          p.mode = "free";
+          p.atk = null;
+          p.recovering = false;
+        }
+      },
+    });
+    this.telemetry.react("attack", this.now);
+    this.sfx.swing(false);
+    this.note("attack", { id: "AIR", chain: 0 });
+  }
+
+  private land() {
+    const p = this.p, f = this.player;
+    f.z = 0;
+    p.vz = 0;
+    this.sfx.thud(0.35);
+    this.vfx.play(FX_EXTRA.smokeA, f.x, f.y - 4, { scale: 0.7, alpha: 0.8 });
+    this.note("land");
+    if (p.atk) {
+      p.mode = "attack"; // the air attack finishes on the ground
+      return;
+    }
+    p.mode = "land";
+    p.landUntil = this.now + HERO.landLagMs;
+    f.play(HERO_CLIPS.land);
+  }
+
+  private startDash(dir: { x: number; y: number; any: boolean }) {
+    const p = this.p, f = this.player;
+    const away = { x: -f.face, y: 0 };
+    const d = dir.any ? { x: dir.x, y: dir.y } : away;
+    p.mode = "dash";
+    p.atk = null;
+    p.chain = 0;
+    p.def.guarding = false;
+    p.dashStart = this.now;
+    p.dashDone = 0;
+    p.dashDir = d;
+    p.dashCdUntil = this.now + HERO.dashCdMs;
+    // moving backwards while facing the enemy: the run cycle is played in REVERSE so the knight backs away rather than moonwalks forwards
+    const back = d.x * f.face < -0.3;
+    const run = HERO_CLIPS.run;
+    f.play(back ? { ...run, from: run.to, to: run.from, fps: 36 } : { ...run, fps: 36 }, { loop: true });
+    f.startTrail(HERO.dashMs + 80, 0x8fd0ff, 26, 0.55, 300, true);
+    this.vfx.play(FX_EXTRA.smokeA, f.x, f.y - 4, { scale: 0.7, alpha: 0.8, flip: d.x < 0 });
+    this.sfx.whoosh(0.3, 0.2, 500, 1800);
+    this.telemetry.record("dash", this.now);
+    this.note("dash", { back });
   }
 
   private startSkill(id: string) {
@@ -369,6 +490,8 @@ export class ArenaScene extends Phaser.Scene {
       this.telemetry.rollDir((p.rollDir.x * ex + p.rollDir.y * ey) / m);
     }
     this.player.play(HERO_CLIPS.roll);
+    this.player.startTrail(HERO.rollMs - 80, 0xffa860, 40, 0.42, 260);
+    this.vfx.play(FX_EXTRA.smokeA, this.player.x, this.player.y - 4, { scale: 0.6, alpha: 0.7 });
     this.sfx.roll();
     this.note("roll");
   }
@@ -392,6 +515,7 @@ export class ArenaScene extends Phaser.Scene {
     p.queued = false;
     p.recovering = false;
     p.dash += this.player.face * this.reachableLunge(a.lunge);
+    if (a.lunge >= 20) this.player.startTrail(120, 0xffe0b0, 36, 0.35, 200); // the lunge leaves a brief afterimage
     this.player.play(a.clip, {
       onDone: () => {
         if (p.queued && a.next) return this.startAttack(a.next);
@@ -434,6 +558,7 @@ export class ArenaScene extends Phaser.Scene {
         return;
       }
       if (this.e.mode === "dead") return;
+      if (Math.abs(this.player.z - this.enemy.z) > (a.id === "AIR" ? HERO.airReachZ : HERO.groundReachZ)) return;
       if (inReach(this.player.x, this.player.y, this.player.face, this.enemy.x, this.enemy.y, h.reach * (this.perk("reach") ? 1.15 : 1), h.band ?? 38, this.boss.radius)) {
         p.hitDone[i] = true;
         this.playerHitsEnemy(a, h, i);
@@ -445,7 +570,8 @@ export class ArenaScene extends Phaser.Scene {
     const e = this.e;
     const broken = e.mode === "broken";
     const riposte = this.now < this.p.riposteUntil;
-    let dmg = h.dmg * (riposte ? 1.5 : 1);
+    const jc = a.id === "AIR" && this.now - e.leapAt <= JUMP_COUNTER.windowMs;
+    let dmg = h.dmg * (riposte ? 1.5 : 1) * (jc ? JUMP_COUNTER.dmgMul : 1);
     if (broken) dmg *= ENEMY.deathblowMult;
     dmg = Math.round(dmg);
     e.hp = Math.max(0, e.hp - dmg);
@@ -458,6 +584,16 @@ export class ArenaScene extends Phaser.Scene {
     this.popup(this.enemy.x, this.enemy.y - 130, broken ? "DEATHBLOW " + dmg : String(dmg), broken ? "#ff5d5d" : "#ffd166");
     this.shake(h.kind === "heavy" || broken ? 0.006 : 0.002, 90);
     this.p.spirit = Math.min(HERO.spirit, this.p.spirit + HERO.spiritHit);
+    if (jc) {
+      // the jump counter: the boss's own swing is thrown back and a lot of posture comes off it
+      e.leapAt = -1e9;
+      this.popup(this.enemy.x, this.enemy.y - 170, "JUMP COUNTER", "#ffd23f");
+      this.sfx.deflect();
+      this.p.spirit = Math.min(HERO.spirit, this.p.spirit + 1);
+      if (e.mode === "attack" && e.atk) this.reverseEnemy(e.atk, h, JUMP_COUNTER.posture);
+      else e.posture = Math.min(100, e.posture + JUMP_COUNTER.posture);
+      this.enemy.ghost(0xffd23f, 0.5, 320, true);
+    }
     if (a.id === "FLAME") this.vfx.play(FX_EXTRA.burst, this.enemy.x, this.enemy.y - 20, { scale: 1.6, add: true });
     this.note("playerHit", { id: a.id, hit: i, dmg, broken, riposte, chain: this.p.chain });
     if (broken) {
@@ -506,11 +642,12 @@ export class ArenaScene extends Phaser.Scene {
       },
     });
     let lead = 0;
-    const pi = Math.max(0, a.hits.findIndex((h) => h.kind === "perilous"));
+    const pi = Math.max(0, a.hits.findIndex((h) => h.kind === "perilous" || h.kind === "sweep"));
     for (let f = a.clip.from; f < a.hits[pi].a; f++) lead += 1000 / (a.clip.fps ?? 12) + (holds[f] ?? 0);
     e.strikeAt = this.now + lead;
     if (a.perilous) this.sfx.warn("thrust");
-    this.popup(this.enemy.x, this.enemy.y - 135, a.perilous ? "!!" : "!", a.perilous ? "#ff3b3b" : "#ff5d5d");
+    const sweepy = a.hits.some((h) => h.kind === "sweep");
+    this.popup(this.enemy.x, this.enemy.y - 135, sweepy ? "JUMP!" : a.perilous ? "!!" : "!", sweepy ? "#ffd23f" : a.perilous ? "#ff3b3b" : "#ff5d5d");
     this.note("enemyAttack", { id: a.id, strikeAt: Math.round(e.strikeAt) });
   }
 
@@ -586,7 +723,7 @@ export class ArenaScene extends Phaser.Scene {
     const inRange = inReach(f.x, f.y, f.face, this.player.x, this.player.y, h.reach, h.band ?? 38, HERO.radius, h.around);
     if (a.clashable && inRange && p.mode === "attack" && p.atk && !p.recovering && this.playerInStrike()) return this.startClash(a, h, i);
     const countered = h.kind === "perilous" && this.now - p.counterAt <= HERO.counterMs;
-    const out: Outcome = resolveEnemyHit(p.def, this.now, h, inRange, countered, (this.assist ? HERO.assistDeflectMs : HERO.deflectMs) + (this.perk("keen") ? 40 : 0));
+    const out: Outcome = resolveEnemyHit(p.def, this.now, h, inRange, countered, (this.assist ? HERO.assistDeflectMs : HERO.deflectMs) + (this.perk("keen") ? 40 : 0), this.player.z >= HERO.leapZ);
     this.note("enemyHit", { id: a.id, hit: i, outcome: out, frame: f.anim.frame });
     this.telemetry.outcome(a.id, out);
     const mid = { x: (this.player.x + f.x) / 2, y: this.player.y - 40 * SCALE * 0.6 };
@@ -603,6 +740,13 @@ export class ArenaScene extends Phaser.Scene {
             if (this.e.posture >= ENEMY.posture) this.breakEnemy();
           }
         }
+        break;
+      case "leapt":
+        this.popup(this.player.x, this.player.y - 150, "LEAP", "#ffd23f");
+        this.sfx.slip();
+        p.spirit = Math.min(HERO.spirit, p.spirit + 1);
+        this.e.leapAt = this.now;
+        this.telemetry.record("counter", this.now);
         break;
       case "deflected":
         this.reverseEnemy(a, h, h.posture * 1.3 * (this.perk("wrist") ? 1.3 : 1));
@@ -710,7 +854,7 @@ export class ArenaScene extends Phaser.Scene {
   loadBoss(id: string) {
     if (!BOSSES[id]) return;
     this.boss = BOSSES[id];
-    this.enemy.sprite.destroy();
+    this.enemy.destroy();
     this.enemy = this.makeEnemy();
     this.buildArea();
     this.reset();
@@ -867,7 +1011,7 @@ export class ArenaScene extends Phaser.Scene {
     const lastTwo = last.slice(-2).map((id) => this.boss.attacks[id]?.perilous);
     const snap: Snapshot = {
       boss: { name: this.boss.name, phase: this.phase(), hpPct: Math.round((e.hp / this.boss.hp) * 100), posturePct: Math.round(e.posture), mode: e.mode, lastActions: last.slice(-5), sameActionStreak: streak },
-      player: { hpPct: Math.round((p.hp / HERO.hp) * 100), posturePct: Math.round(p.posture), spirit: Math.floor(p.spirit), state: p.mode, distancePx: dist, guardHeld: p.def.guarding, riposteReady: this.now < p.riposteUntil, standingStillMs: Math.round(this.standingStill) },
+      player: { hpPct: Math.round((p.hp / HERO.hp) * 100), posturePct: Math.round(p.posture), spirit: Math.floor(p.spirit), state: p.mode, airborne: this.player.z > 10, distancePx: dist, guardHeld: p.def.guarding, riposteReady: this.now < p.riposteUntil, standingStillMs: Math.round(this.standingStill) },
       recent: this.telemetry.recent(this.now, 8000),
       vsMove: this.telemetry.summary(),
       lastOutcome: this.telemetry.lastOutcome,
@@ -1213,7 +1357,8 @@ export class ArenaScene extends Phaser.Scene {
       const total = (e.atk.clip.holds ? Object.values(e.atk.clip.holds).reduce((a, b) => a + b, 0) : 800) + 200;
       const r = 16 + 56 * Math.min(1, left / total);
       const inWin = left <= HERO.counterMs;
-      g.lineStyle(3, inWin ? 0xffffff : 0xff3b3b, 1).strokeCircle(this.enemy.x, this.enemy.y - 55, r);
+      const sweepRing = e.atk.hits.some((h) => h.kind === "sweep");
+      g.lineStyle(3, inWin ? 0xffffff : sweepRing ? 0xffd23f : 0xff3b3b, 1).strokeCircle(this.enemy.x, this.enemy.y - 55, r);
       g.lineStyle(1, 0xff3b3b, 0.6).strokeCircle(this.enemy.x, this.enemy.y - 55, 16);
     }
     // QTE overlay

@@ -71,10 +71,10 @@ const MB: BossDef = {
       range: [40, 170], cooldownMs: 2000, lunge: 50, clashable: true, gate: gate(0),
     },
     FLURRY: {
-      id: "FLURRY", desc: "A long three-part flurry that ends in a big wide sweep. Strong against a player who stands and blocks, because the finishing sweep is a heavy hit. Gives a branch point after the first cut.",
+      id: "FLURRY", desc: "A long three-part flurry (two cuts you can deflect) that ends in a big low SWEEP along the ground: unblockable, and rolling does not help, only a JUMP clears it (a player who leaps it can counter from the air). Strong against a player who stands, blocks or rolls. Gives a branch point after the first cut.",
       clip: { sheet: "mb_3_atk", from: 0, to: 17, fps: 18, holds: { 0: 520, 3: 140, 10: 220 } },
-      hits: [{ a: 1, b: 3, dmg: 9, posture: 12, reach: 125 }, { a: 4, b: 5, dmg: 9, posture: 12, reach: 135 }, { a: 11, b: 16, dmg: 16, posture: 22, reach: 170, kind: "heavy" }],
-      range: [20, 180], cooldownMs: 3200, lunge: 40, gate: gate(0),
+      hits: [{ a: 1, b: 3, dmg: 9, posture: 12, reach: 125 }, { a: 4, b: 5, dmg: 9, posture: 12, reach: 135 }, { a: 11, b: 16, dmg: 16, posture: 22, reach: 170, kind: "sweep" }],
+      range: [20, 180], cooldownMs: 3200, lunge: 40, gate: gate(0), perilous: true,
     },
     BLOOM: {
       id: "BLOOM", desc: "PERILOUS: blades erupt from the ground on both sides of you. Unblockable: guarding does nothing. The player beats it by pressing attack just before it lands (a counter) or by rolling through it. Punishes players who turtle behind guard. Use sparingly: it has a long cooldown.",
@@ -127,9 +127,9 @@ const CM: BossDef = {
       ] },
     },
     SHATTER: {
-      id: "SHATTER", desc: "PERILOUS: throws the hammer into the ground and a huge wall of crystal shards erupts forward across most of the arena. Unblockable. Beat it with a roll through the shards or an attack-press counter just before it lands. Use it when the player is far away or turtling.",
+      id: "SHATTER", desc: "SWEEP: throws the hammer into the ground and a huge wall of crystal shards erupts forward along the floor across most of the arena. Unblockable and rolling does not help: the player must JUMP over it (and can counter from the air). Use it when the player is far away, turtling or rolling a lot.",
       clip: { sheet: "cm_sp_atk", from: 0, to: 14, fps: 14, holds: { 6: 600 } },
-      hits: [{ a: 8, b: 11, dmg: 28, posture: 24, reach: 320, band: 70, kind: "perilous" }],
+      hits: [{ a: 8, b: 11, dmg: 28, posture: 24, reach: 320, band: 70, kind: "sweep" }],
       range: [60, 330], cooldownMs: 7000, lunge: 0, perilous: true,
     },
   },

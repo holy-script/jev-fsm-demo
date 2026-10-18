@@ -9,11 +9,20 @@ export interface InputFrame {
   attack: boolean; // pressed this frame
   guard: boolean; // pressed this frame
   roll: boolean;
+  jump: boolean;
+  dash: boolean;
   skill: boolean;
+  bolt: boolean;
+  nova: boolean;
+  item: boolean;
+  pot: boolean;
   guardHeld: boolean;
   pause: boolean;
   pad: boolean; // a pad drove any of this frame's input
 }
+
+/** An input frame with nothing pressed (menus, bots, tests). */
+export const blankFrame = (): InputFrame => ({ dir: { x: 0, y: 0, any: false }, attack: false, guard: false, roll: false, jump: false, dash: false, skill: false, bolt: false, nova: false, item: false, pot: false, guardHeld: false, pause: false, pad: false });
 
 export class GameInput {
   private keys = new Map<string, Phaser.Input.Keyboard.Key>();
@@ -66,6 +75,7 @@ export class GameInput {
     let guard = this.just("guard");
     let roll = this.just("roll");
     let skill = this.just("skill");
+    let jump = this.just("jump"), dash = this.just("dash"), bolt = this.just("bolt"), nova = this.just("nova"), item = this.just("item"), pot = this.just("pot");
     let guardHeld = this.down("guard");
     let pause = false;
     let pad = false;
@@ -83,6 +93,12 @@ export class GameInput {
       if (edge(PAD.attack)) { attack = true; pad = true; }
       if (edge(PAD.roll)) { roll = true; pad = true; }
       if (edge(PAD.skill)) { skill = true; pad = true; }
+      for (const [k, v] of [["jump", PAD.jump], ["dash", PAD.dash], ["bolt", PAD.bolt], ["nova", PAD.nova], ["item", PAD.item], ["pot", PAD.pot]] as const) {
+        if (edge(v)) {
+          pad = true;
+          if (k === "jump") jump = true; else if (k === "dash") dash = true; else if (k === "bolt") bolt = true; else if (k === "nova") nova = true; else if (k === "item") item = true; else pot = true;
+        }
+      }
       const gh = PAD.guard.some(b);
       if (PAD.guard.some(edge)) { guard = true; pad = true; }
       if (gh) { guardHeld = true; pad = true; }
@@ -92,7 +108,7 @@ export class GameInput {
     }
     const m = Math.hypot(x, y);
     if (m > 1) { x /= m; y /= m; }
-    return { dir: { x, y, any: Math.abs(x) > 0.01 || Math.abs(y) > 0.01 }, attack, guard, roll, skill, guardHeld, pause, pad };
+    return { dir: { x, y, any: Math.abs(x) > 0.01 || Math.abs(y) > 0.01 }, attack, guard, roll, jump, dash, skill, bolt, nova, item, pot, guardHeld, pause, pad };
   }
 
   get usingPad() {

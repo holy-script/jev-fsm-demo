@@ -54,7 +54,7 @@ const bad = await p.evaluate(() => {
       if (!s || a.clip.to >= s.frames) out.push(`${b.id}.${a.id} clip`);
       for (const h of a.hits) if (h.a > a.clip.to || h.b > s.frames + 5) out.push(`${b.id}.${a.id} hit ${h.a}-${h.b}`);
       if (a.gate && a.gate.afterHit >= a.hits.length) out.push(`${b.id}.${a.id} gate`);
-      if (a.perilous && !a.hits.some((h) => h.kind === "perilous")) out.push(`${b.id}.${a.id} perilous flag without a perilous hit`);
+      if (a.perilous && !a.hits.some((h) => h.kind === "perilous" || h.kind === "sweep")) out.push(`${b.id}.${a.id} perilous flag without a perilous or sweep hit`);
     }
   }
   return out;
@@ -173,7 +173,7 @@ for (const id of ["cm", "wh", "echo", "mb"]) {
 }
 
 // ---- 17: progression
-reset(); await setup("mb", 100, false); await p.evaluate(() => (window.__arena.e.hp = 3)); await key("j", 30); await p.waitForTimeout(800); await key("n", 40); await p.waitForTimeout(400);
+reset(); await setup("mb", 100, false); await p.evaluate(() => (window.__arena.e.hp = 3)); await key("j", 30); await p.waitForTimeout(800); await key("F6", 40); await p.waitForTimeout(400);
 const nb = await p.evaluate(() => ({ id: window.__arena.boss.id, hp: window.__arena.e.hp, prefix: window.__arena.enemy.prefix }));
 check("victory then N loads the next boss (Crystal Mauler, 800 hp)", nb.id === "cm" && nb.hp === 800 && nb.prefix === "cm", nb);
 

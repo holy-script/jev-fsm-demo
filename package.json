@@ -13,7 +13,7 @@
     "assets:arena": "python3 -I tools/prep_arena_assets.py",
     "assets:download:arena": "node tools/itch_download.mjs arena",
     "balance:arena": "node tests/arena/bot.mjs",
-    "test:arena": "node tests/arena/phase1.mjs && node tests/arena/phase2.mjs && node tests/arena/phase3.mjs && node tests/arena/phase4.mjs && node tests/arena/phase5a.mjs && node tests/arena/phase5b.mjs && node tests/arena/phase5c.mjs && node tests/arena/phase5d.mjs && node tests/arena/phase6.mjs",
+    "test:arena": "node tests/arena/phase1.mjs && node tests/arena/phase2.mjs && node tests/arena/phase3.mjs && node tests/arena/phase4.mjs && node tests/arena/phase5a.mjs && node tests/arena/phase5b.mjs && node tests/arena/phase5c.mjs && node tests/arena/phase5d.mjs && node tests/arena/phase6.mjs && node tests/arena/phase7a.mjs",
     "test:duel": "node tests/duel/mechanics.mjs && node tests/duel/jev-gates.mjs && node tests/duel/golem.mjs && node tests/duel/beat.mjs && node tests/duel/skills.mjs && node tests/duel/tutorial.mjs && node tests/duel/grunts.mjs && node tests/duel/world.mjs && node tests/duel/bringer.mjs && node tests/duel/jev2.mjs"
   },
   "dependencies": {

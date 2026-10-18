@@ -169,7 +169,10 @@ export default function ArenaClient() {
         const km: Keymap = { ...s.keymap, [listening.action]: [...s.keymap[listening.action]] };
         // a key can drive only one action: take it away from any other
         for (const a of ACTIONS) if (a !== listening.action) km[a] = km[a].filter((n) => n !== k);
-        for (const a of ACTIONS) if (!km[a].length) km[a] = [DEFAULT_KEYMAP[a].find((n) => n !== k) ?? DEFAULT_KEYMAP[a][0]];
+        // an action that lost its only key gets its default back, or a free spare key if the default is the key just taken
+        const used = () => new Set(ACTIONS.flatMap((x) => km[x]).concat([k]));
+        const spare = ["Z", "X", "C", "V", "B", "N", "M", "T", "Y", "O", "P"];
+        for (const a of ACTIONS) if (!km[a].length) km[a] = [DEFAULT_KEYMAP[a].find((n) => !used().has(n)) ?? spare.find((n) => !used().has(n)) ?? "Z"];
         km[listening.action][listening.slot] = k;
         km[listening.action] = km[listening.action].filter((n, i, arr) => n && arr.indexOf(n) === i);
         const next = { ...s, keymap: km };

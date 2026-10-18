@@ -1,18 +1,18 @@
 /** Key bindings and labels: no Phaser import, so the React shell can use it during server rendering. The Phaser side is input.ts. */
-export type Action = "up" | "down" | "left" | "right" | "attack" | "guard" | "roll" | "skill";
+export type Action = "up" | "down" | "left" | "right" | "attack" | "guard" | "roll" | "jump" | "dash" | "skill" | "bolt" | "nova" | "item" | "pot";
 export type Keymap = Record<Action, string[]>;
 
-export const ACTIONS: Action[] = ["up", "down", "left", "right", "attack", "guard", "roll", "skill"];
-export const ACTION_LABEL: Record<Action, string> = { up: "Move up", down: "Move down", left: "Move left", right: "Move right", attack: "Attack", guard: "Guard / parry", roll: "Roll", skill: "Flame burst" };
+export const ACTIONS: Action[] = ["up", "down", "left", "right", "attack", "guard", "roll", "jump", "dash", "skill", "bolt", "nova", "item", "pot"];
+export const ACTION_LABEL: Record<Action, string> = { up: "Move up", down: "Move down", left: "Move left", right: "Move right", attack: "Attack", guard: "Guard / parry", roll: "Roll", jump: "Jump", dash: "Dash", skill: "Flame Burst", bolt: "Ember Bolt", nova: "Inferno Ring", item: "Healing gourd", pot: "Fire pot" };
 
 /** Phaser key names (Phaser.Input.Keyboard.KeyCodes). Two slots per action; the first is the one shown in prompts. */
 export const DEFAULT_KEYMAP: Keymap = {
   up: ["W", "UP"], down: ["S", "DOWN"], left: ["A", "LEFT"], right: ["D", "RIGHT"],
-  attack: ["J"], guard: ["SPACE", "K"], roll: ["SHIFT", "L"], skill: ["E"],
+  attack: ["J"], guard: ["SPACE", "K"], roll: ["SHIFT", "L"], jump: ["I"], dash: ["U"], skill: ["E"], bolt: ["Q"], nova: ["R"], item: ["H"], pot: ["G"],
 };
 
-/** Gamepad (standard mapping): left stick or d-pad moves, X attacks, A rolls, B or a shoulder button guards, Y casts, Start pauses. */
-export const PAD = { attack: 2, roll: 0, guard: [1, 4, 5], skill: 3, start: 9, dpad: { up: 12, down: 13, left: 14, right: 15 }, deadzone: 0.3 };
+/** Gamepad (standard mapping): left stick or d-pad moves, X attacks, A rolls, B or LB guards, RB jumps, RT dashes, Y Flame Burst, LT Ember Bolt, Back Inferno Ring, L3 gourd, R3 fire pot, Start pauses. */
+export const PAD = { attack: 2, roll: 0, guard: [1, 4], jump: 5, dash: 7, skill: 3, bolt: 6, nova: 8, item: 10, pot: 11, start: 9, dpad: { up: 12, down: 13, left: 14, right: 15 }, deadzone: 0.3 };
 
 const NAMED: Record<string, string> = { Space: "SPACE", ShiftLeft: "SHIFT", ShiftRight: "SHIFT", ControlLeft: "CTRL", ControlRight: "CTRL", Enter: "ENTER", Backspace: "BACKSPACE", Comma: "COMMA", Period: "PERIOD", Slash: "FORWARD_SLASH", Semicolon: "SEMICOLON", Quote: "QUOTES" };
 const DIGITS = ["ZERO", "ONE", "TWO", "THREE", "FOUR", "FIVE", "SIX", "SEVEN", "EIGHT", "NINE"];

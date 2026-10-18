@@ -23,6 +23,7 @@ export interface HitDef {
   /** vertical tolerance in px (the game is top-down: y is depth) */
   band?: number;
   /** can the hit be deflected (normal) or does it need a roll (sweep) */
+  /** sweep: unblockable and low: rolling does NOT protect, only being airborne (a jump) does; leaping it opens a jump counter */
   kind?: "normal" | "heavy" | "sweep" | "perilous";
   /** hits on both sides of the attacker (ground blades) instead of only in front */
   around?: boolean;
@@ -87,6 +88,22 @@ export const HERO = {
   hurtMs: 380,
   hurtInvulnMs: 700,
   radius: 18,
+  /** vertical movement (px, px/s, px/s^2) */
+  jumpV: 650,
+  gravity: 1950,
+  airSpeed: 135,
+  jumpCdMs: 140,
+  landLagMs: 110,
+  /** airborne above this height counts as leaping a low hit; a swing reaches targets within this height difference */
+  leapZ: 38,
+  /** height difference a swing can bridge: an air attack dives (large), a ground swing barely reaches an airborne target */
+  airReachZ: 140,
+  groundReachZ: 70,
+  /** dash: a short burst with a brief invulnerable start */
+  dashDist: 150,
+  dashMs: 190,
+  dashIFramesMs: 90,
+  dashCdMs: 650,
   spirit: 5,
   spiritDeflect: 1,
   spiritCounter: 1,
@@ -135,7 +152,17 @@ export const HERO_ATTACKS: Record<string, PlayerAttack> = {
     chainFrom: 99, lunge: 14,
   },
 };
+/** The Fire Knight's air attack (fk_air_atk: wind-up 0-2, slash 3-5, recovery 6-7). Used while airborne; carries the knight forward. */
+export const AIR_ATTACK: PlayerAttack = {
+  id: "AIR", clip: { sheet: "fk_air_atk", from: 0, to: 7, fps: 24 }, hits: [{ a: 3, b: 5, dmg: 12, posture: 20, reach: 150, band: 60 }], chainFrom: 99, lunge: 46,
+};
+/** Leaping a sweep and striking from the air within `windowMs` is a jump counter: bonus damage and posture, and the boss's swing rewinds. */
+export const JUMP_COUNTER = { windowMs: 1000, dmgMul: 1.6, posture: 35 };
+
 export const HERO_CLIPS = {
+  jumpUp: { sheet: "fk_jump_up", from: 0, to: 2, fps: 14 } as Clip,
+  jumpDown: { sheet: "fk_jump_down", from: 0, to: 2, fps: 14 } as Clip,
+  land: { sheet: "fk_jump", from: 16, to: 19, fps: 30 } as Clip,
   idle: { sheet: "fk_idle", from: 0, to: 7, fps: 8 } as Clip,
   run: { sheet: "fk_run", from: 0, to: 7, fps: 14 } as Clip,
   roll: { sheet: "fk_roll", from: 0, to: 7, fps: 20 } as Clip,
