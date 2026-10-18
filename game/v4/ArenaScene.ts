@@ -21,6 +21,7 @@ import { loadSettings, type ArenaSettings } from "./settings";
 import type { ArenaHooks } from "./createArenaGame";
 import type { ArenaManifest } from "./manifest";
 import { Vfx } from "./vfx";
+import { AudioManager } from "./audio";
 
 /** Phase 1 test arena: Fire Knight against a Metal Bladekeeper training enemy on a flat floor. The point is the kernel (combat model,
  *  combo chain, reverse perfect parry, animator), not the content; phases 3 to 5 replace the enemy, map and HUD. Controls:
@@ -84,6 +85,7 @@ export class ArenaScene extends Phaser.Scene {
   private trail = { p: 1, e: 1 };
   private texts: Record<string, Phaser.GameObjects.Text> = {};
   sfx!: Sfx;
+  music!: AudioManager;
   /** menu: title backdrop (no input, AI idle, HUD hidden); play: the fight */
   mode: "menu" | "play" = "play";
   run: RunSave | null = null;
@@ -128,6 +130,7 @@ export class ArenaScene extends Phaser.Scene {
     this.player = new Fighter(this, "fk", this.manifest.sheets, HERO.radius);
     this.boss = BOSSES[new URLSearchParams(window.location.search).get("boss") ?? "mb"] ?? BOSSES.mb;
     this.sfx = new Sfx(this, this.manifest, () => this.settings);
+    this.music = new AudioManager();
     this.buildArea();
     this.enemy = this.makeEnemy();
     this.hud = this.add.graphics().setDepth(2000);
