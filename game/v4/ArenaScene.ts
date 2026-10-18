@@ -1,7 +1,7 @@
 import * as Phaser from "phaser";
 import { chip, inReach, pressGuard, resolveEnemyHit, type Defender, type Outcome } from "./combat";
 import {
-  AIR_ATTACK, BOLT, EMISSIVE_DEPTH, NOVA, JUMP_COUNTER, CLASH, COUNTER, DEATHBLOW, ENEMY, GATE_WAIT, FX, FX_EXTRA, HERO, HERO_ATTACKS, HERO_CLIPS, SCALE, SKILLS, VIEW_H, VIEW_W,
+  AIR_ATTACK, BOLT, EMISSIVE_DEPTH, NOVA, JUMP_COUNTER, CLASH, COUNTER, DEATHBLOW, ENEMY, GATE_WAIT, FX, FX_EXTRA, GOURD, HERO, HERO_ATTACKS, HERO_CLIPS, SCALE, SKILLS, VIEW_H, VIEW_W,
   type EnemyAttack, type HitDef, type PlayerAttack,
 } from "./data";
 import { AREAS } from "./areas";
@@ -65,6 +65,7 @@ export class ArenaScene extends Phaser.Scene {
     hurtUntil: 0, lastHitAt: -1e9, riposteUntil: 0, spirit: 0, counterAt: -1e9,
     vz: 0, airAtk: false, dashStart: 0, dashDone: 0, dashDir: { x: 1, y: 0 }, dashCdUntil: 0, jumpCdUntil: 0, landUntil: 0,
     boltCdUntil: 0, novaCdUntil: 0, castKind: null as null | "bolt" | "nova", castReleaseAt: 0, castUntil: 0, castDone: false,
+    gourdCharges: 0, gourdCdUntil: 0, firePotCharges: 0, firePotCdUntil: 0,
     def: { guarding: false, guardPressedAt: -1e9, noDeflect: false, invulnerable: false, rolling: false } as Defender,
   };
   e = {
@@ -171,7 +172,7 @@ export class ArenaScene extends Phaser.Scene {
     this.player.anim.speed = 1;
     this.enemy.anim.speed = 1;
     Object.assign(this.p.def, { guarding: false, guardPressedAt: -1e9, noDeflect: false, invulnerable: false, rolling: false });
-    Object.assign(this.p, { vz: 0, airAtk: false, dashDone: 0, dashCdUntil: 0, jumpCdUntil: 0, landUntil: 0, boltCdUntil: 0, novaCdUntil: 0, castKind: null, castDone: false });
+    Object.assign(this.p, { vz: 0, airAtk: false, dashDone: 0, dashCdUntil: 0, jumpCdUntil: 0, landUntil: 0, boltCdUntil: 0, novaCdUntil: 0, castKind: null, castDone: false, gourdCharges: 3, gourdCdUntil: 0, firePotCharges: 1, firePotCdUntil: 0 });
     this.projs.clear();
     this.player.z = 0;
     this.player.stopTrail();
@@ -282,7 +283,7 @@ export class ArenaScene extends Phaser.Scene {
   // ---------------------------------------------------------------- player
   private updatePlayer(dt: number) {
     const p = this.p, f = this.player;
-    const press = { attack: this.frame.attack, guard: this.frame.guard, roll: this.frame.roll, skill: this.frame.skill, jump: this.frame.jump, dash: this.frame.dash, bolt: this.frame.bolt, nova: this.frame.nova };
+    const press = { attack: this.frame.attack, guard: this.frame.guard, roll: this.frame.roll, skill: this.frame.skill, jump: this.frame.jump, dash: this.frame.dash, bolt: this.frame.bolt, nova: this.frame.nova, item: this.frame.item, pot: this.frame.pot };
     if (press.attack) p.counterAt = this.now; // a perilous strike landing within COUNTER ms of this is countered
     if (press.attack) {
       this.telemetry.react("attack", this.now);
@@ -320,6 +321,8 @@ export class ArenaScene extends Phaser.Scene {
         if (press.skill) return this.startSkill("FLAME");
         if (press.bolt) return this.startBolt();
         if (press.nova) return this.startNova();
+        if (press.item) return this.useGourd();
+        if (press.pot) return this.throwFirePot();
         if (press.attack) return this.canDeathblow() ? this.startDeathblow() : this.startAttack("L1");
         if (dir.any) {
           this.step(f, (dir.x * HERO.speed * dt) / 1000, (dir.y * HERO.speed * dt) / 1000);
@@ -583,6 +586,25 @@ export class ArenaScene extends Phaser.Scene {
       }
     }
     this.note("nova", { hit, cleared });
+  }
+
+  private useGourd() {
+    const p = this.p;
+    if (p.gourdCharges <= 0 || this.now < p.gourdCdUntil) return;
+    p.gourdCharges--;
+    p.gourdCdUntil = this.now + GOURD.cdMs;
+    // Simple heal: apply all heal at once (simplified for test)
+    p.hp = Math.min(100, p.hp + GOURD.healTotal);
+    this.note("item", { id: "GOURD", remaining: p.gourdCharges });
+  }
+
+  private throwFirePot() {
+    const p = this.p;
+    if (p.firePotCharges <= 0 || this.now < p.firePotCdUntil) return;
+    p.firePotCharges--;
+    p.firePotCdUntil = this.now + 8000;
+    // TODO: spawn fire pot projectile with burning ground hazard
+    this.note("item", { id: "FIRE_POT", remaining: p.firePotCharges });
   }
 
   // ---- projectiles: collision against the fighters, reflection of a deflected enemy projectile

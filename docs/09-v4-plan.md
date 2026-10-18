@@ -328,3 +328,15 @@ Updated boss weights to include phase2 moves in all distance bands; persona desc
 **Regression:** phases 1–2, 4–7c green (343/344 checks pass); phase 3 has 29/30 (one optional `__bosses` validation check does not run in test environment). All bosses can now perform their full move set in phase 2.
 
 **Exit check:** met. Phase2 moves integrated; Jev briefed; availableActions() filtering works; full regression solid; ready for phase 7e items and 7f atmosphere.
+
+## 19. Phase 7e results: items and pickups (basic implementation)
+
+**Deliverables:** Healing Gourd (H, 3 charges) and Fire Pot (G, 1 charge) item system. Player state added with `gourdCharges`, `gourdCdUntil`, `firePotCharges`, `firePotCdUntil` fields. useGourd() method heals the player; throwFirePot() placeholder. Input frame updated with `item` and `pot` actions; both wired to free mode. GOURD and FIRE_POT constants in data.ts with heal/damage stats.
+
+**Test suite 7e:** 5 checks verifying initial item counts, gourd healing, charge consumption, and fire pot state. Placeholder tests for picker orbs and burning ground deferred.
+
+**Regression:** 354/355 checks pass (phase 3 has 29/30; optional validation check does not run). Phases 1–7d maintain full green.
+
+**Exit check:** partial. Item system scaffolding complete; gourd usage working. Fire pot throwing and burning ground hazards deferred to 7f; pickup orbs and shrine refill deferred. Core item infrastructure in place for later expansion.
+
+**Deferred to 7f:** Fire pot explosion with burning ground hazard entity, pickup orb spawning and collection, HUD item bar, shrine refill logic, atmosphere effects (rain, lightning, dust, camera effects).

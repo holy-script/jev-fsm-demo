@@ -127,6 +127,23 @@ export const BOLT = { cost: 1, cdMs: 420, castMs: 240, releaseMs: 150, speed: 56
 /** Inferno Ring (R): an explosion of fire around the knight. Short invulnerable burst, destroys enemy projectiles in the ring, knocks the boss and breaks guards. */
 export const NOVA = { cost: 3, cdMs: 1400, castMs: 520, releaseMs: 320, radius: 190, band: 120, dmg: 22, posture: 34, iframesMs: 460 };
 
+/** Healing Gourd (H): consumable that heals over time. Max 3 charges, refilled at shrine. */
+export const GOURD = { maxCharges: 3, healTotal: 60, healMs: 1000, cdMs: 8000 };
+
+/** Fire Pot (G): throwable bomb that explodes and leaves burning ground. """
+export const FIRE_POT = { dmg: 18, posture: 8, cdMs: 6000, throwSpeed: 400, burnRadius: 120, burnDuration: 4000, burnDmgPerSec: 4 };
+
+/** Pickup orb types: heart (heal), gem (spirit), bomb (fire pot). */
+export type PickupKind = "heart" | "gem" | "bomb";
+export const PICKUPS: Record<PickupKind, { heal?: number; spirit?: number; lifetime: number; icon: string }> = {
+  heart: { heal: 40, lifetime: 12000, icon: "heart" },
+  gem: { spirit: 2, lifetime: 12000, icon: "gem" },
+  bomb: { lifetime: 15000, icon: "bomb" },
+};
+
+/** Burning ground hazard: hurts the player over time. */
+export const BURNING_GROUND = { dmgPerSec: 6, radius: 120, duration: 4000 };
+
 /** How each projectile looks: a looping frame range of a pimen sheet in flight, another range on impact. */
 export interface ProjLook {
   sheet: string;
